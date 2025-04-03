@@ -7,7 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 [Unreleased]: https://github.com/LupaHQ/argon/compare/v2.1.0...HEAD
 
-## [2.1.0] - 2024-04-03
+## [v2.1.0] - 2024-04-03
 
 ### Added
 
