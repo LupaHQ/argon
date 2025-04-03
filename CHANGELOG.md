@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), that adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+[Unreleased]: https://github.com/LupaHQ/argon/compare/v2.1.1...HEAD
+
+## [v2.1.1] - 2024-04-03
+
+### Fixed
+
+- Changed Roblox plugin download source in `argon plugin install` and `argon update plugin` commands to use the `LupaHQ/argon-roblox` fork, ensuring the correct plugin version is installed.
 
 ## [v2.1.0] - 2024-04-03
 
@@ -373,7 +380,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Brand new Argon CLI, written in Rust
 
-[2.1.0]: https://github.com/LupaHQ/argon/compare/2.0.23...v2.1.0
+[v2.1.1]: https://github.com/LupaHQ/argon/compare/v2.1.0...v2.1.1
+[v2.1.0]: https://github.com/LupaHQ/argon/compare/2.0.23...v2.1.0
 [2.0.23]: https://github.com/argon-rbx/argon/compare/2.0.22...2.0.23
 [2.0.22]: https://github.com/argon-rbx/argon/compare/2.0.21...2.0.22
 [2.0.21]: https://github.com/argon-rbx/argon/compare/2.0.20...2.0.21
