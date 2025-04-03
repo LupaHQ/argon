@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), that adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - YYYY-MM-DD
+
+### Added
+
+- **Roblox Log Syncing:** Added a new feature to sync `print`, `warn`, and `error` outputs from Roblox Studio server scripts to a local file (`.argon/logs/session.log` by default). Configure via `logSync` object in `project.json` or `argon.logSync.*` settings in VS Code. Enabled by default.
+
 ## [Unreleased]
 
 ### Added

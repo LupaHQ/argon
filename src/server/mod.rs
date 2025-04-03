@@ -16,6 +16,7 @@ use crate::{
 mod details;
 mod exec;
 mod home;
+mod log;
 mod open;
 mod read;
 mod snapshot;
@@ -90,6 +91,7 @@ impl Server {
 				.service(snapshot::main)
 				.service(read::main)
 				.service(write::main)
+				.service(log::main)
 				.service(exec::main)
 				.service(open::main)
 				.service(stop::main)

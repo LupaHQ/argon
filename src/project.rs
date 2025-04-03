@@ -76,6 +76,21 @@ pub struct SyncbackSettings {
 	pub ignore_properties: Vec<String>,
 }
 
+// New struct for log sync settings
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct LogSyncSettings {
+	#[serde(default = "default_log_sync_enabled")]
+	pub enabled: bool,
+
+	#[serde(default = "default_log_target_file")]
+	pub target_file: String,
+
+	// Filter patterns are handled client-side (Roblox) for now
+	// #[serde(default, skip_serializing_if = "Vec::is_empty")]
+	// pub filter_patterns: Vec<String>,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Project {
@@ -100,6 +115,10 @@ pub struct Project {
 
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub syncback: Option<SyncbackSettings>,
+
+	// Add log sync settings field
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub log_sync: Option<LogSyncSettings>,
 
 	#[serde(alias = "emitLegacyScripts", skip_serializing_if = "Option::is_none")]
 	pub legacy_scripts: Option<bool>,
@@ -274,5 +293,15 @@ impl ProjectDetails {
 }
 
 fn default_project_name() -> String {
-	String::from("default")
+	String::from("Argon Project")
+}
+
+// Default function for log target file
+fn default_log_target_file() -> String {
+	".argon/logs/session.log".to_string() // Using the cleaner default path
+}
+
+// Default function for log sync enabled
+fn default_log_sync_enabled() -> bool {
+	true
 }
