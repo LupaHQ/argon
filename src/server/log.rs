@@ -16,27 +16,14 @@ use log::warn; // Use warn for logging errors here
 
 const SESSION_START_MARKER: &str = "__ARGON_LOG_SESSION_START__";
 const SESSION_START_HEADER: &str = "--- Argon Log Session Started: "; // Timestamp will be added
-
-fn get_log_settings(core: &Core) -> Option<crate::project::LogSyncSettings> {
-    let project = core.project(); // core.project() already returns the guard
-    project.log_sync.clone() // Clone the settings if they exist
-}
+const LOG_FILE_PATH: &str = "lemonlogs.txt"; // Changed path
 
 #[post("/log")]
 async fn main(_core: Data<Arc<Core>>, body: MsgPack<String>) -> impl Responder {
     let log_message = body.0; // Access inner value using .0, not into_inner()
 
-    // Get log settings from project config
-    let log_settings = match get_log_settings(&_core) {
-        Some(settings) if settings.enabled => settings,
-        _ => {
-            // Feature not enabled or config missing, silently ignore
-            // Or maybe return a specific header/status? For now, just OK.
-            return HttpResponse::Ok().body("Log sync disabled");
-        }
-    };
-
-    let log_file_path = _core.project().workspace_dir.join(&log_settings.target_file); // Use guard directly
+    // Use hardcoded path relative to workspace root
+    let log_file_path = _core.project().workspace_dir.join(LOG_FILE_PATH);
 
      if log_message == SESSION_START_MARKER {
         // Clear the file and write header
