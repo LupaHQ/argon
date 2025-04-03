@@ -13,6 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Changed Roblox plugin download source in `argon plugin install` and `argon update plugin` commands to use the `LupaHQ/argon-roblox` fork, ensuring the correct plugin version is installed.
 
+## [2.1.0] - 2025-04-03
+
 ## [v2.1.0] - 2024-04-03
 
 ### Added
@@ -411,3 +413,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 [2.0.0-pre3]: https://github.com/argon-rbx/argon/compare/2.0.0-pre2...2.0.0-pre3
 [2.0.0-pre2]: https://github.com/argon-rbx/argon/compare/2.0.0-pre1...2.0.0-pre2
 [2.0.0-pre1]: https://github.com/argon-rbx/argon/compare/1.3.0...2.0.0-pre1
+[unreleased]: https://github.com/LupaHQ/argon/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/LupaHQ/argon/compare/2.0.23...v2.1.0
