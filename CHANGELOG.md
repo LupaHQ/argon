@@ -6,7 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-[Unreleased]: https://github.com/LupaHQ/argon/compare/0.0.16...HEAD
+[Unreleased]: https://github.com/LupaHQ/argon/compare/0.0.17...HEAD
+
+## [0.0.17] - 2025-04-22
+
+### Fixed
+- Fixed initialization of ArgonMcpHandler to properly initialize state
+- Added missing error handling for local RAG functionality
+- Improved logging for MCP protocol messages
+
+[0.0.17]: https://github.com/LupaHQ/argon/compare/0.0.15...0.0.17
 
 ## [0.0.16] - 2025-04-22
 
