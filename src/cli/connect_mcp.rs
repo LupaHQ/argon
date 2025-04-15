@@ -3,7 +3,7 @@ use clap::Parser;
 use eventsource_client as sse;
 use eventsource_client::Client;
 use futures::StreamExt;
-use log::{debug, error, info, warn};
+use log::{debug, error, info, trace, warn};
 use serde_json::Value;
 use tokio::runtime::Runtime;
 
@@ -93,40 +93,49 @@ impl ConnectMcp {
 	async fn handle_sse_item(&self, item: sse::SSE) {
 		match item {
 			sse::SSE::Event(event) => {
-				// Process different event types according to MCP protocol
+				trace!(
+					"Received SSE Event: type = '{}', data = '{}'",
+					event.event_type,
+					event.data
+				);
 				match event.event_type.as_str() {
 					"ping" => {
-						debug!("Received MCP ping, sending pong");
+						debug!("Received MCP ping, simulating pong");
 						self.send_pong().await;
 					}
 					"message" => {
 						// Parse the message as JSON
 						if let Ok(json) = serde_json::from_str::<Value>(&event.data) {
+							trace!("Parsed JSON message: {:#?}", json);
 							self.handle_jsonrpc_message(json).await;
 						} else {
-							debug!("Received non-JSON message: {}", event.data);
+							warn!("Received non-JSON message data: {}", event.data);
 						}
 					}
 					_ => {
 						debug!(
-							"Received unhandled event type: {} with data: {}",
+							"Received unhandled SSE event type: {} with data: {}",
 							event.event_type, event.data
 						);
 					}
 				}
 			}
 			sse::SSE::Comment(comment) => {
-				debug!("Received SSE comment: {}", comment);
+				trace!("Received SSE comment: {}", comment);
 			}
 		}
 	}
 
 	async fn send_pong(&self) {
 		// For now, we just log that we would send a pong response
-		debug!("Would send pong response if required by the protocol");
+		// In a real implementation, this would need to interact with the connection
+		// object to send data back to the server, if the protocol/connection allows.
+		// This might involve making an HTTP POST request back to a specific endpoint if SSE is one-way.
+		debug!("SIMULATING PONG: Would send pong response back to the server here.");
 	}
 
 	async fn handle_jsonrpc_message(&self, json: Value) {
+		trace!("Handling JSON-RPC message: {:#?}", json);
 		// Check if it's a JSON-RPC message
 		if let Some(jsonrpc) = json.get("jsonrpc") {
 			if jsonrpc.as_str() == Some("2.0") {
@@ -152,26 +161,27 @@ impl ConnectMcp {
 					}
 					"error" => {
 						if let Some(error_msg) = json.get("error").and_then(|e| e.as_str()) {
-							error!("Received MCP error: {}", error_msg);
+							error!("Received MCP error message: {}", error_msg);
 						}
 					}
 					"status" => {
 						if let Some(status) = json.get("status").and_then(|s| s.as_str()) {
-							info!("MCP status change: {}", status);
+							info!("MCP status change message: {}", status);
 						}
 					}
 					_ => {
-						debug!("Unhandled message type: {}", message_type);
+						debug!("Unhandled legacy message type: {}", message_type);
 					}
 				}
 			} else {
-				debug!("Received JSON message without type: {:?}", json);
+				warn!("Received JSON message without type field: {:#?}", json);
 			}
 		}
 	}
 
 	async fn handle_jsonrpc_request(&self, method: &str, json: Value) {
-		info!("Received JSON-RPC request for method: {}", method);
+		info!("Received JSON-RPC request for method: '{}'", method);
+		trace!("Full request JSON: {:#?}", json);
 
 		let id = json.get("id").map(|id| id.to_string().trim_matches('"').to_string());
 
@@ -197,7 +207,6 @@ impl ConnectMcp {
 				info!("Received initialize request");
 				if let Some(id) = id {
 					debug!("Sending initialize response for id: {}", id);
-					// In a future implementation, we would send a proper initialize response
 				}
 			}
 			"$/cancelRequest" => {
@@ -214,14 +223,17 @@ impl ConnectMcp {
 	}
 
 	async fn handle_jsonrpc_response(&self, json: Value) {
+		trace!("Handling JSON-RPC response: {:#?}", json);
 		if let Some(id) = json.get("id") {
 			if let Some(result) = json.get("result") {
-				info!("Received successful response for request {}: {:?}", id, result);
+				info!("Received successful response for request id '{}'", id);
+				trace!("Response result: {:#?}", result);
 			} else if let Some(error) = json.get("error") {
-				error!("Received error response for request {}: {:?}", id, error);
+				error!("Received error response for request id '{}'", id);
+				trace!("Response error: {:#?}", error);
 			}
 		} else {
-			debug!("Received response without ID: {:?}", json);
+			warn!("Received JSON-RPC response without ID: {:#?}", json);
 		}
 	}
 }

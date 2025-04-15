@@ -6,7 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-[Unreleased]: https://github.com/LupaHQ/argon/compare/0.0.14...HEAD
+[Unreleased]: https://github.com/LupaHQ/argon/compare/0.0.15...HEAD
+
+## [0.0.15] - 2025-04-17
+
+### Added
+- Added detailed trace logging for MCP connection (`connect-mcp`) to aid debugging.
+
+[0.0.15]: https://github.com/LupaHQ/argon/compare/0.0.14...0.0.15
 
 ## [0.0.14] - 2025-04-17
 
