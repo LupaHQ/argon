@@ -116,3 +116,6 @@ approx = "0.5.1"
 [patch.crates-io]
 notify-debouncer-full = { path = "crates/notify-debouncer-full" }
 self_update = { path = "crates/self_update" }
+
+[dependencies.relative-path]
+version = "=1.9.3"

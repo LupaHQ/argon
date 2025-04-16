@@ -54,6 +54,10 @@ struct ArgonMcpServer {
 impl ArgonMcpServer {
 	// Updated new function (Removed host and port parameters)
 	fn new() -> Self {
+		// The peer field is initialized as None here, but it will be properly set during
+		// the server.serve(stdio()) call via the ServiceExt::serve method from the rmcp crate.
+		// The serve method sets up the transport, performs initialization handshake, and
+		// populates the peer field with the connected Peer object that handles communication.
 		Self {
 			peer: Arc::new(Mutex::new(None)),
 			// host, // Removed
@@ -69,6 +73,11 @@ impl ArgonMcpServer {
 			_ => info!("{:?}: {}", level, message),
 		}
 
+		// Clone the Arc pointer to the mutex-protected peer field to move it into
+		// the async task. The peer field may be None early in the server lifecycle
+		// before the serve() method completes initialization. The if-let inside the
+		// task safely handles this case, only attempting to send notifications when
+		// peer is available.
 		let peer_arc = Arc::clone(&self.peer);
 		let message_string = message.to_string(); // Clone message for the async task
 
@@ -288,6 +297,10 @@ impl ConnectMcp {
 		let server = ArgonMcpServer::new();
 
 		// Start MCP server using stdio transport
+		// The ServiceExt::serve method creates a Peer instance from the transport
+		// and stores it in server.peer during initialization. The server.peer field
+		// starts as None but is populated during the initialization handshake.
+		// This is provided by the rmcp crate's ServiceExt extension trait.
 		let server_handle = server.serve(stdio()).await.map_err(|e| {
 			eprintln!("Failed to start server: {:?}", e);
 			anyhow::anyhow!("Server start failed: {}", e)
