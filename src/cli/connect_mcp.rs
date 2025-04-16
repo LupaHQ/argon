@@ -23,15 +23,7 @@ use tokio::sync::Mutex;
 /// Connect to an MCP endpoint (used internally by Cursor)
 #[derive(Parser)]
 pub struct ConnectMcp {
-	/// The host to connect to
-	#[arg(long, default_value = "127.0.0.1")]
-	host: String,
-
-	/// The port to connect to
-	#[arg(long, default_value = "7781")]
-	port: u16,
-
-	/// Whether to run in client mode
+	/// Whether to run in client mode (Currently ignored, always runs as stdio server)
 	#[arg(long)]
 	client: bool,
 }
@@ -289,8 +281,7 @@ impl ConnectMcp {
 			info!("Client mode is not supported in this implementation, running in server mode.");
 		}
 
-		// Log host and port from ConnectMcp struct directly
-		info!("Starting Argon MCP Server (configured for {}:{})", self.host, self.port);
+		// Remove log referencing unused host/port
 		eprintln!("Starting Argon MCP Server (stdio mode)...");
 
 		// Create server instance (Removed host and port arguments)
