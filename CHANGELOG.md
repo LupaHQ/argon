@@ -6,7 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-[Unreleased]: https://github.com/LupaHQ/argon/compare/0.0.17...HEAD
+[Unreleased]: https://github.com/LupaHQ/argon/compare/0.0.20...HEAD
+
+## [0.0.20] - 2025-04-30
+
+### Added
+- Improved MCP server configuration with simplified `connect-mcp` format
+- Added direct Pinecone API key support for local RAG functionality
+
+### Fixed
+- Enhanced error handling for MCP connections
+
+[0.0.20]: https://github.com/LupaHQ/argon/compare/0.0.17...0.0.20
 
 ## [0.0.17] - 2025-04-22
 
