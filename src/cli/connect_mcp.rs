@@ -1,274 +1,307 @@
-use anyhow::{bail, Result};
+use anyhow::Result;
 use clap::Parser;
-use eventsource_client as sse;
-use eventsource_client::Client;
-use futures::StreamExt;
-use log::{debug, error, info, warn};
-use serde_json::Value;
-use tokio::runtime::Runtime;
+use log::info;
+use rmcp::{
+	model::{
+		CallToolResult, Content, GetPromptRequestParam, GetPromptResult, Implementation, ListPromptsResult,
+		ListResourceTemplatesResult, ListResourcesResult, LoggingLevel, LoggingMessageNotification,
+		LoggingMessageNotificationMethod, LoggingMessageNotificationParam, Notification, PaginatedRequestParam,
+		ProtocolVersion, ReadResourceRequestParam, ReadResourceResult, ServerCapabilities, ServerInfo,
+		ServerNotification,
+	},
+	service::{RequestContext, RoleServer},
+	tool,
+	transport::io::stdio,
+	Error as McpError, Peer, ServerHandler, ServiceExt,
+};
+use schemars::JsonSchema;
+use serde::Deserialize;
+use serde_json::json;
+use std::{env, sync::Arc};
+use tokio::sync::Mutex;
 
-/// Connect to an MCP SSE endpoint (used internally by Cursor)
+/// Connect to an MCP endpoint (used internally by Cursor)
 #[derive(Parser)]
 pub struct ConnectMcp {
-	/// The URL of the SSE endpoint
-	#[arg()]
-	url: String,
+	/// The host to connect to
+	#[arg(long, default_value = "127.0.0.1")]
+	host: String,
+
+	/// The port to connect to
+	#[arg(long, default_value = "7781")]
+	port: u16,
 
 	/// Whether to run in client mode
 	#[arg(long)]
 	client: bool,
 }
 
-impl ConnectMcp {
-	pub fn main(self) -> Result<()> {
-		let rt = Runtime::new()?;
-		rt.block_on(async { self.run_connection().await })
+// Define argument struct for our tools
+#[derive(Debug, Deserialize, JsonSchema)]
+struct PineconeQueryArgs {
+	#[schemars(description = "The query text to send to the Pinecone assistant.")]
+	query: String,
+}
+
+// Main server struct (Removed host and port)
+#[derive(Clone)]
+struct ArgonMcpServer {
+	peer: Arc<Mutex<Option<Peer<RoleServer>>>>,
+	// host: String, // Removed
+	// port: u16,    // Removed
+}
+
+impl ArgonMcpServer {
+	// Updated new function (Removed host and port parameters)
+	fn new() -> Self {
+		Self {
+			peer: Arc::new(Mutex::new(None)),
+			// host, // Removed
+			// port, // Removed
+		}
 	}
 
-	async fn run_connection(&self) -> Result<()> {
-		info!("Connecting to MCP SSE stream at: {}", self.url);
+	// Helper function to send log messages (matches RustDocsServer approach)
+	fn send_log(&self, level: LoggingLevel, message: &str) {
+		// Log locally first
+		match level {
+			LoggingLevel::Info => info!("{:?}: {}", level, message), // Use debug format for enum
+			_ => info!("{:?}: {}", level, message),
+		}
 
-		if self.client {
-			info!("Running in client mode");
+		let peer_arc = Arc::clone(&self.peer);
+		let message_string = message.to_string(); // Clone message for the async task
+
+		tokio::spawn(async move {
+			let mut peer_guard = peer_arc.lock().await;
+			if let Some(peer) = peer_guard.as_mut() {
+				let params = LoggingMessageNotificationParam {
+					level,
+					logger: None, // Or some logger name if desired
+					data: serde_json::Value::String(message_string),
+				};
+				let log_notification: LoggingMessageNotification = Notification {
+					method: LoggingMessageNotificationMethod,
+					params,
+				};
+				let server_notification = ServerNotification::LoggingMessageNotification(log_notification);
+				if let Err(e) = peer.send_notification(server_notification).await {
+					// Log error locally if sending notification fails
+					info!("Failed to send MCP log notification: {}", e);
+				}
+			}
+		});
+	}
+
+	// --- Internal Helper for Pinecone API Call ---
+	async fn call_pinecone_assistant(&self, assistant_name: &str, query: &str, top_k: u32) -> Result<String, McpError> {
+		let api_key = env::var("PINECONE_API_KEY")
+			.map_err(|_| McpError::internal_error("PINECONE_API_KEY environment variable not set", None))?;
+
+		let endpoint = format!(
+			"https://prod-1-data.ke.pinecone.io/assistant/chat/{}/context",
+			assistant_name
+		);
+
+		let client = reqwest::Client::new();
+		let payload = json!({
+			"query": query,
+			"top_k": top_k
+		});
+
+		let response = client
+			.post(&endpoint)
+			.header("Api-Key", api_key)
+			.header("Accept", "application/json")
+			.header("Content-Type", "application/json")
+			.header("X-Pinecone-API-Version", "2025-04") // Use the version from TS code
+			.json(&payload)
+			.send()
+			.await
+			.map_err(|e| McpError::internal_error(format!("Reqwest error: {}", e), None))?;
+
+		if response.status().is_success() {
+			let response_body = response
+				.text()
+				.await
+				.map_err(|e| McpError::internal_error(format!("Failed to read response body: {}", e), None))?;
+			Ok(response_body)
 		} else {
-			warn!("Server mode not supported for SSE transport, running in client mode");
-		}
-
-		// Build the client with retry
-		let client = sse::ClientBuilder::for_url(&self.url)?
-			.header("Accept", "text/event-stream")?
-			.build();
-
-		// Subscribe to the SSE stream
-		let mut stream = client.stream();
-
-		// Send initial subscribe message to register with the server
-		self.send_subscribe_request(&self.url).await?;
-
-		info!("Successfully connected to MCP server");
-
-		// Process stream events
-		let mut connection_attempts = 0;
-		let max_connection_attempts = 10;
-
-		loop {
-			match stream.next().await {
-				Some(Ok(sse_item)) => {
-					// Reset connection attempts on successful message
-					connection_attempts = 0;
-					self.handle_sse_item(sse_item).await;
-				}
-				Some(Err(err)) => {
-					error!("SSE stream error: {}", err);
-					connection_attempts += 1;
-
-					if connection_attempts >= max_connection_attempts {
-						error!("Maximum connection attempts reached. Giving up.");
-						bail!("Failed to maintain connection to MCP server: {}", err);
-					}
-
-					let delay = 2u64.pow(connection_attempts.min(6)) * 1000;
-					warn!("Reconnecting in {} ms...", delay);
-					tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
-				}
-				None => {
-					info!("SSE stream closed by server.");
-					break;
-				}
-			}
-		}
-
-		Ok(())
-	}
-
-	async fn send_subscribe_request(&self, url: &str) -> Result<()> {
-		// Log the subscription attempt
-		debug!("Attempting to subscribe to SSE stream at: {}", url);
-
-		// In a future implementation we could use reqwest to send an actual POST request
-		// to notify the server about our subscription if the protocol requires it
-		Ok(())
-	}
-
-	async fn handle_sse_item(&self, item: sse::SSE) {
-		match item {
-			sse::SSE::Event(event) => {
-				// Process different event types according to MCP protocol
-				match event.event_type.as_str() {
-					"ping" => {
-						debug!("Received MCP ping, sending pong");
-						self.send_pong().await;
-					}
-					"message" => {
-						// Parse the message as JSON
-						if let Ok(json) = serde_json::from_str::<Value>(&event.data) {
-							self.handle_jsonrpc_message(json).await;
-						} else {
-							debug!("Received non-JSON message: {}", event.data);
-						}
-					}
-					_ => {
-						debug!(
-							"Received unhandled event type: {} with data: {}",
-							event.event_type, event.data
-						);
-					}
-				}
-			}
-			sse::SSE::Comment(comment) => {
-				debug!("Received SSE comment: {}", comment);
-			}
-		}
-	}
-
-	async fn send_pong(&self) {
-		// For now, we just log that we would send a pong response
-		debug!("Would send pong response if required by the protocol");
-	}
-
-	async fn handle_jsonrpc_message(&self, json: Value) {
-		// Check if it's a JSON-RPC message
-		if let Some(jsonrpc) = json.get("jsonrpc") {
-			if jsonrpc.as_str() == Some("2.0") {
-				// Handle different types of JSON-RPC messages
-				if let Some(method) = json.get("method").and_then(|m| m.as_str()) {
-					// This is a request or notification
-					self.handle_jsonrpc_request(method, json.clone()).await;
-				} else if json.get("result").is_some() || json.get("error").is_some() {
-					// This is a response
-					self.handle_jsonrpc_response(json).await;
-				}
-			} else {
-				debug!("Non 2.0 JSON-RPC message: {:?}", json);
-			}
-		} else {
-			// Process as a regular JSON message for backward compatibility
-			if let Some(message_type) = json.get("type").and_then(|t| t.as_str()) {
-				match message_type {
-					"completion" => {
-						if let Some(completion) = json.get("completion").and_then(|c| c.as_str()) {
-							info!("Received completion: {}", completion);
-						}
-					}
-					"error" => {
-						if let Some(error_msg) = json.get("error").and_then(|e| e.as_str()) {
-							error!("Received MCP error: {}", error_msg);
-						}
-					}
-					"status" => {
-						if let Some(status) = json.get("status").and_then(|s| s.as_str()) {
-							info!("MCP status change: {}", status);
-						}
-					}
-					_ => {
-						debug!("Unhandled message type: {}", message_type);
-					}
-				}
-			} else {
-				debug!("Received JSON message without type: {:?}", json);
-			}
-		}
-	}
-
-	async fn handle_jsonrpc_request(&self, method: &str, json: Value) {
-		info!("Received JSON-RPC request for method: {}", method);
-
-		let id = json.get("id").map(|id| id.to_string().trim_matches('"').to_string());
-
-		// Process different method types
-		match method {
-			"callTool" => {
-				// Tool call handling
-				if let Some(params) = json.get("params") {
-					if let Some(tool_name) = params.get("name").and_then(|n| n.as_str()) {
-						info!("Received tool call for: {}", tool_name);
-
-						// Log the parameters
-						if let Some(args) = params.get("arguments") {
-							debug!("Tool arguments: {:?}", args);
-						}
-
-						// For now, we just log the call. In a future implementation,
-						// we could forward this to the appropriate tool handler
-					}
-				}
-			}
-			"initialize" => {
-				info!("Received initialize request");
-				if let Some(id) = id {
-					debug!("Sending initialize response for id: {}", id);
-					// In a future implementation, we would send a proper initialize response
-				}
-			}
-			"$/cancelRequest" => {
-				if let Some(params) = json.get("params") {
-					if let Some(cancel_id) = params.get("id") {
-						info!("Request cancelled: {}", cancel_id);
-					}
-				}
-			}
-			_ => {
-				debug!("Unhandled JSON-RPC method: {}", method);
-			}
-		}
-	}
-
-	async fn handle_jsonrpc_response(&self, json: Value) {
-		if let Some(id) = json.get("id") {
-			if let Some(result) = json.get("result") {
-				info!("Received successful response for request {}: {:?}", id, result);
-			} else if let Some(error) = json.get("error") {
-				error!("Received error response for request {}: {:?}", id, error);
-			}
-		} else {
-			debug!("Received response without ID: {:?}", json);
+			let status = response.status();
+			let error_body = response
+				.text()
+				.await
+				.unwrap_or_else(|_| "Could not read error body".to_string());
+			Err(McpError::internal_error(
+				format!("Pinecone API error ({}): {}", status, error_body),
+				None,
+			))
 		}
 	}
 }
 
-#[cfg(test)]
-mod tests {
-	use super::*;
-	use serde_json::json;
+// Define tools
+#[tool(tool_box)]
+impl ArgonMcpServer {
+	#[tool(description = "Query the Roblox Developer Forum via Pinecone.")]
+	async fn roblox_developer_forum(&self, #[tool(aggr)] args: PineconeQueryArgs) -> Result<CallToolResult, McpError> {
+		self.send_log(
+			LoggingLevel::Info,
+			&format!("Calling roblox-developer-forum with query: {}", args.query),
+		);
+		let response_body = self.call_pinecone_assistant("roblox-assistant", &args.query, 5).await?;
+		Ok(CallToolResult {
+			content: vec![Content::text(response_body)],
+			is_error: Some(false),
+		})
+	}
 
-	#[test]
-	fn test_parse_jsonrpc_request() {
-		let message = json!({
-			"jsonrpc": "2.0",
-			"method": "callTool",
-			"params": {
-				"name": "testTool",
-				"arguments": {
-					"arg1": "value1"
-				}
+	#[tool(description = "Query Luau documentation via Pinecone.")]
+	async fn luau_documentation(&self, #[tool(aggr)] args: PineconeQueryArgs) -> Result<CallToolResult, McpError> {
+		self.send_log(
+			LoggingLevel::Info,
+			&format!("Calling luau-documentation with query: {}", args.query),
+		);
+		let response_body = self
+			.call_pinecone_assistant("roblox-luau-assistant", &args.query, 5)
+			.await?;
+		Ok(CallToolResult {
+			content: vec![Content::text(response_body)],
+			is_error: Some(false),
+		})
+	}
+
+	#[tool(description = "Query Roblox engine documentation via Pinecone.")]
+	async fn roblox_engine_documentation(
+		&self,
+		#[tool(aggr)] args: PineconeQueryArgs,
+	) -> Result<CallToolResult, McpError> {
+		self.send_log(
+			LoggingLevel::Info,
+			&format!("Calling roblox-engine-documentation with query: {}", args.query),
+		);
+		// Note: top_k = 1 for this assistant
+		let response_body = self
+			.call_pinecone_assistant("roblox-engine-reference-assistant", &args.query, 1)
+			.await?;
+		Ok(CallToolResult {
+			content: vec![Content::text(response_body)],
+			is_error: Some(false),
+		})
+	}
+}
+
+// Implement the server handler trait
+#[tool(tool_box)]
+impl ServerHandler for ArgonMcpServer {
+	fn get_info(&self) -> ServerInfo {
+		self.send_log(LoggingLevel::Debug, "Getting server info");
+
+		let capabilities = ServerCapabilities::builder().enable_tools().enable_logging().build();
+
+		ServerInfo {
+			protocol_version: ProtocolVersion::V_2024_11_05,
+			capabilities,
+			server_info: Implementation {
+				name: "argon".to_string(),
+				version: env!("CARGO_PKG_VERSION").to_string(),
 			},
-			"id": 1
-		});
+			instructions: Some("This server provides tools for Roblox development in argon".to_string()),
+		}
+	}
 
-		// Ensure this doesn't panic
-		let connect_mcp = ConnectMcp {
-			url: "https://example.com".to_string(),
-			client: true,
-		};
+	async fn list_resources(
+		&self,
+		_request: PaginatedRequestParam,
+		_context: RequestContext<RoleServer>,
+	) -> Result<ListResourcesResult, McpError> {
+		Ok(ListResourcesResult {
+			resources: vec![],
+			next_cursor: None,
+		})
+	}
 
-		// We can't easily test the async function directly in a sync test,
-		// but we can verify the handler doesn't panic when handling basic patterns
-		let rt = Runtime::new().unwrap();
-		rt.block_on(async {
-			connect_mcp.handle_jsonrpc_message(message).await;
-		});
+	async fn read_resource(
+		&self,
+		request: ReadResourceRequestParam,
+		_context: RequestContext<RoleServer>,
+	) -> Result<ReadResourceResult, McpError> {
+		Err(McpError::resource_not_found(
+			format!("Resource URI not found: {}", request.uri),
+			Some(json!({ "uri": request.uri })),
+		))
+	}
 
-		// Test response handling
-		let response = json!({
-			"jsonrpc": "2.0",
-			"result": {
-				"success": true
-			},
-			"id": 1
-		});
+	async fn list_prompts(
+		&self,
+		_request: PaginatedRequestParam,
+		_context: RequestContext<RoleServer>,
+	) -> Result<ListPromptsResult, McpError> {
+		Ok(ListPromptsResult {
+			next_cursor: None,
+			prompts: Vec::new(),
+		})
+	}
 
-		rt.block_on(async {
-			connect_mcp.handle_jsonrpc_message(response).await;
-		});
+	async fn get_prompt(
+		&self,
+		request: GetPromptRequestParam,
+		_context: RequestContext<RoleServer>,
+	) -> Result<GetPromptResult, McpError> {
+		Err(McpError::invalid_params(
+			format!("Prompt not found: {}", request.name),
+			None,
+		))
+	}
+
+	async fn list_resource_templates(
+		&self,
+		_request: PaginatedRequestParam,
+		_context: RequestContext<RoleServer>,
+	) -> Result<ListResourceTemplatesResult, McpError> {
+		Ok(ListResourceTemplatesResult {
+			next_cursor: None,
+			resource_templates: Vec::new(),
+		})
+	}
+}
+
+impl ConnectMcp {
+	pub fn main(self) -> Result<()> {
+		// Create a new tokio runtime
+		let rt = tokio::runtime::Runtime::new()?;
+
+		// Run the server in the runtime
+		rt.block_on(async { self.run_server().await })
+	}
+
+	async fn run_server(&self) -> Result<()> {
+		if self.client {
+			info!("Client mode is not supported in this implementation, running in server mode.");
+		}
+
+		// Log host and port from ConnectMcp struct directly
+		info!("Starting Argon MCP Server (configured for {}:{})", self.host, self.port);
+		eprintln!("Starting Argon MCP Server (stdio mode)...");
+
+		// Create server instance (Removed host and port arguments)
+		let server = ArgonMcpServer::new();
+
+		// Start MCP server using stdio transport
+		let server_handle = server.serve(stdio()).await.map_err(|e| {
+			eprintln!("Failed to start server: {:?}", e);
+			anyhow::anyhow!("Server start failed: {}", e)
+		})?;
+
+		eprintln!("Argon MCP Server running...");
+
+		// Wait for the server to complete
+		server_handle.waiting().await.map_err(|e| {
+			eprintln!("Server encountered an error while running: {:?}", e);
+			anyhow::anyhow!("Server runtime failed: {}", e)
+		})?;
+
+		eprintln!("Server stopped.");
+		Ok(())
 	}
 }

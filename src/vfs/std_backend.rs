@@ -1,7 +1,7 @@
 use crossbeam_channel::Receiver;
 use std::{
 	fs,
-	io::{Error, ErrorKind, Result},
+	io::Result,
 	path::{Path, PathBuf},
 };
 
@@ -59,7 +59,7 @@ impl VfsBackend for StdBackend {
 		self.unwatch(path)?;
 
 		if Config::new().move_to_bin {
-			trash::delete(path).map_err(|err| Error::new(ErrorKind::Other, err))
+			trash::delete(path).map_err(std::io::Error::other)
 		} else if path.is_dir() {
 			fs::remove_dir_all(path)
 		} else {

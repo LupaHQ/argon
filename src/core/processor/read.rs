@@ -23,7 +23,7 @@ pub fn process_changes(id: Ref, tree: &mut Tree, vfs: &Vfs) -> Option<Changes> {
 
 	let snapshot = match source {
 		SourceKind::Project(name, path, node, node_path) => {
-			match new_snapshot_node(name, path, node.clone(), node_path.clone(), &meta.context, vfs) {
+			match new_snapshot_node(name, path, *node.clone(), node_path.clone(), &meta.context, vfs) {
 				Ok(snapshot) => Some(snapshot),
 				Err(err) => {
 					error!("Failed to process changes: {}, source: {:?}", err, source);

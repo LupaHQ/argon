@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{
+	boxed::Box,
 	fmt::Display,
 	path::{Path, PathBuf},
 };
@@ -55,7 +56,7 @@ impl Display for NodePath {
 #[derive(Debug, Clone, PartialEq)]
 pub enum SourceKind {
 	Path(PathBuf),
-	Project(String, PathBuf, ProjectNode, NodePath),
+	Project(String, PathBuf, Box<ProjectNode>, NodePath),
 	None,
 }
 
@@ -140,7 +141,7 @@ impl Source {
 
 	pub fn project(name: &str, path: &Path, node: ProjectNode, node_path: NodePath) -> Self {
 		Self {
-			inner: SourceKind::Project(name.to_owned(), path.to_owned(), node, node_path),
+			inner: SourceKind::Project(name.to_owned(), path.to_owned(), Box::new(node), node_path),
 			relevant: vec![],
 		}
 	}

@@ -6,9 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.0.16] - 2025-04-18
+
+### Fixed
+
+- Fixed large enum variant clippy warning in `SourceKind` by boxing `ProjectNode`
+- Updated `io_other_error` patterns to use `Error::other()` instead of `Error::new(ErrorKind::Other, err)`
+- Removed unused `io::self` import
+- Fixed MCP server implementation to match Cursor requirements
+
+[unreleased]: https://github.com/LupaHQ/argon/compare/0.0.16...HEAD
+[0.0.16]: https://github.com/LupaHQ/argon/compare/0.0.15...0.0.16
+
 ## [0.0.15] - 2025-04-15
 
-[unreleased]: https://github.com/LupaHQ/argon/compare/0.0.15...HEAD
 [0.0.15]: https://github.com/LupaHQ/argon/compare/0.0.14...0.0.15
 
 ## [0.0.14] - 2025-04-17
