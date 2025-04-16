@@ -96,8 +96,8 @@ impl ArgonMcpServer {
 
 	// --- Internal Helper for Pinecone API Call ---
 	async fn call_pinecone_assistant(&self, assistant_name: &str, query: &str, top_k: u32) -> Result<String, McpError> {
-		let api_key = env::var("PINECONE_API_KEY")
-			.map_err(|_| McpError::internal_error("PINECONE_API_KEY environment variable not set", None))?;
+		// Hardcode the access credential directly
+		let pinecone_access_credential = "pcsk_2gFUZL_57whMAskjRznWocbNp8sFS2mKWGCn4d7rn6bvQLxSEofYtbCxrjq2k4tAF1A2Rz"; // Renamed variable
 
 		let endpoint = format!(
 			"https://prod-1-data.ke.pinecone.io/assistant/chat/{}/context",
@@ -112,7 +112,7 @@ impl ArgonMcpServer {
 
 		let response = client
 			.post(&endpoint)
-			.header("Api-Key", api_key)
+			.header("Api-Key", pinecone_access_credential) // Use renamed variable
 			.header("Accept", "application/json")
 			.header("Content-Type", "application/json")
 			.header("X-Pinecone-API-Version", "2025-04") // Use the version from TS code
