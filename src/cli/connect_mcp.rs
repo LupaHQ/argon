@@ -145,12 +145,12 @@ impl RequestHandler for ArgonMcpHandler {
 				name: "local_rag".to_string(),
 				description: "Performs RAG locally using available context.".to_string(),
 				input_schema: json!({ // Define expected input schema for the RAG tool
-					"type": "object",
-					"properties": {
+														"type": "object",
+														"properties": {
 						"query": { "type": "string", "description": "The user query for RAG." },
 						// Add other parameters needed for RAG (e.g., file context?)
-					},
-					"required": ["query"]
+														},
+														"required": ["query"]
 				}),
 			}],
 		})
