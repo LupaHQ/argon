@@ -115,7 +115,6 @@ async fn main(request: MsgPack<LogRequest>, _core: Data<Arc<Core>>) -> impl Resp
 			HttpResponse::InternalServerError().body("Failed to clear log file")
 		}
 	} else {
-		info!("❌ No match. Appending as regular log.");
 		// Proceed with appending the regular log message
 		// Ensure directory exists
 		if let Some(parent) = log_path.parent() {
