@@ -5,7 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), that adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-[Unreleased]: https://github.com/LupaHQ/argon/compare/0.0.23...HEAD
+[Unreleased]: https://github.com/LupaHQ/argon/compare/0.0.24...HEAD
+
+## [0.0.24] - 2024-04-24
+
+### Added
+- Added graceful session shutdown before updates
+- Improved session management with HTTP-first shutdown approach
+- Added fallback process kill for unresponsive sessions
+
+### Changed
+- Refactored update process to handle running sessions
+- Improved error handling in update process
+- Enhanced logging during update operations
+
+### Fixed
+- Fixed type mismatches in update status handling
+- Removed unused imports and dependencies
+- Improved code formatting and organization
+
+[0.0.24]: https://github.com/LupaHQ/argon/compare/0.0.23...0.0.24
 
 ## [0.0.23] - 2024-04-24
 
