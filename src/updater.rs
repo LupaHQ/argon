@@ -1,21 +1,24 @@
-use anyhow::Result;
-use dirs;
-use log::{debug, trace, warn};
-use self_update::{backends::github::Update, cargo_crate_version, version::bump_is_greater};
+use anyhow::{bail, Result};
+use log::{debug, info, trace, warn};
+use self_update::{backends::github::Update, version::bump_is_greater, Status};
 use serde::{Deserialize, Serialize};
-use std::env;
-use std::{fs, sync::Once, time::SystemTime};
+use std::{
+	fs,
+	sync::Once,
+	time::{Duration, SystemTime},
+};
 use yansi::Paint;
 
 use crate::{
-	argon_error, argon_info,
+	argon_error, argon_info, argon_warn,
 	constants::TEMPLATES_VERSION,
 	installer::{get_plugin_version, install_templates},
-	logger,
+	logger, sessions,
 	util::{self, get_plugin_path},
 };
 
 static UPDATE_FORCED: Once = Once::new();
+const UPDATE_CHECK_INTERVAL: u64 = 3600;
 
 #[derive(Serialize, Deserialize)]
 pub struct UpdateStatus {
@@ -23,6 +26,17 @@ pub struct UpdateStatus {
 	pub plugin_version: String,
 	pub templates_version: u8,
 	pub vscode_version: String,
+}
+
+impl Default for UpdateStatus {
+	fn default() -> Self {
+		Self {
+			last_checked: SystemTime::UNIX_EPOCH,
+			plugin_version: String::new(),
+			templates_version: TEMPLATES_VERSION,
+			vscode_version: String::new(),
+		}
+	}
 }
 
 pub fn get_status() -> Result<UpdateStatus> {
@@ -67,179 +81,105 @@ pub fn set_status(status: &UpdateStatus) -> Result<()> {
 	Ok(())
 }
 
-pub fn update_cli(_force: bool, _show_output: bool) -> Result<bool, self_update::errors::Error> {
-	// Check if we're running from VS Code
-	let exe_path = std::env::current_exe().unwrap_or_default();
-	let exe_path_str = exe_path.to_string_lossy();
+async fn stop_running_sessions() -> Result<()> {
+	let sessions = sessions::get_all()?;
 
-	// Print debug info to verify execution path
-	println!("DEBUG: Current executable path: {}", exe_path_str);
+	if sessions.is_empty() {
+		debug!("No running sessions to stop before update");
+		return Ok(());
+	}
 
-	// Platform-specific VS Code detection
-	#[cfg(target_os = "macos")]
-	let is_vscode = exe_path_str.contains("/Code.app/");
+	info!("Stopping running sessions before update...");
 
-	#[cfg(target_os = "windows")]
-	let is_vscode = exe_path_str.contains("\\Microsoft VS Code\\") || exe_path_str.contains("\\Code\\");
-
-	#[cfg(target_os = "linux")]
-	let is_vscode = exe_path_str.contains("/vscode/") || exe_path_str.contains("/code/");
-
-	#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-	let is_vscode = false;
-
-	println!("DEBUG: Detected VS Code environment: {}", is_vscode);
-	trace!("Exe path: {}", exe_path_str);
-	trace!("Is VS Code: {}", is_vscode);
-
-	// Get current exe path
-	let current_exe = env::current_exe()?;
-	trace!("Current executable path: {:?}", current_exe);
-
-	// Get user home directory for better argon binary detection
-	let home_dir = dirs::home_dir().expect("Could not determine home directory");
-	let argon_bin_path = home_dir.join(".argon").join("bin").join("argon");
-
-	println!("DEBUG: Home directory path: {:?}", home_dir);
-	println!("DEBUG: Argon system binary path exists: {}", argon_bin_path.exists());
-
-	// If called from VS Code, use the system binary path
-	let install_path = if is_vscode && argon_bin_path.exists() {
-		println!(
-			"DEBUG: VS Code detected, updating system installation at: {:?}",
-			argon_bin_path
-		);
-		trace!(
-			"VS Code detected, updating system installation at: {:?}",
-			argon_bin_path
-		);
-		argon_bin_path.clone()
-	} else {
-		println!("DEBUG: Updating current executable at: {:?}", current_exe);
-		trace!("Updating current executable at: {:?}", current_exe);
-		current_exe.clone()
-	};
-
-	let style = util::get_progress_style();
-	let _current_version = cargo_crate_version!();
-
-	// Simple update configuration without architecture specifics
-	let mut update_configure = Update::configure();
-	update_configure
-		.repo_owner("LupaHQ")
-		.repo_name("argon")
-		.bin_name("argon")
-		.bin_install_path(&install_path)
-		.show_download_progress(true)
-		.set_progress_style(style.0.clone(), style.1.clone())
-		.no_confirm(true);
-
-	// Print debug info about target architecture
-	#[cfg(target_arch = "aarch64")]
-	println!("DEBUG: Running on aarch64 architecture");
-	#[cfg(target_arch = "x86_64")]
-	println!("DEBUG: Running on x86_64 architecture");
-
-	// Debug info about target platform
-	#[cfg(target_os = "macos")]
-	println!("DEBUG: Running on macOS");
-	#[cfg(target_os = "windows")]
-	println!("DEBUG: Running on Windows");
-	#[cfg(target_os = "linux")]
-	println!("DEBUG: Running on Linux");
-
-	// Try different targets for Apple Silicon
-	#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-	{
-		println!("DEBUG: Apple Silicon detected, attempting update with specific targets...");
-		let targets_to_try = [
-			"aarch64-apple-darwin",
-			"arm64-apple-darwin",  // Alias sometimes used
-			"x86_64-apple-darwin", // Rosetta fallback
-		];
-
-		let mut last_error = None;
-
-		for target in targets_to_try {
-			println!("DEBUG: Trying target: {}", target);
-
-			// Re-create the builder for this specific target attempt
-			let mut target_configure = Update::configure();
-			target_configure
-				.repo_owner("LupaHQ")
-				.repo_name("argon")
-				.bin_name("argon")
-				.bin_install_path(&install_path)
-				.show_download_progress(true)
-				.set_progress_style(style.0.clone(), style.1.clone())
-				.no_confirm(true);
-
-			println!("DEBUG: Attempting update for target: {}", target);
-			let result = target_configure.target(target).build()?.update();
-			println!(
-				"DEBUG: Update attempt result for target {}: {:?}",
-				target,
-				result.is_ok()
-			);
-
-			if result.is_ok() {
-				argon_info!("{}", Paint::green("Argon CLI updated successfully! 🚀"));
-				return Ok(true); // Success, exit early
+	for (_, session) in sessions {
+		if let Some(address) = session.get_address() {
+			// Try to gracefully stop via HTTP first
+			match reqwest::Client::new()
+				.post(format!("{}/stop", address))
+				.timeout(Duration::from_secs(5))
+				.send()
+				.await
+			{
+				Ok(_) => info!("Gracefully stopped session at {}", address),
+				Err(e) => {
+					warn!("Failed to gracefully stop session at {}: {}", address, e);
+					// Fallback to force kill
+					util::kill_process(session.pid);
+					info!("Force stopped process with PID: {}", session.pid);
+				}
 			}
-			println!("DEBUG: Target {} failed: {:?}", target, result.as_ref().err());
-			last_error = result.err(); // Store the error from this attempt
-		}
-
-		// If all targets failed
-		println!("DEBUG: All target options failed.");
-		if let Some(err) = last_error {
-			let release = update_configure.build()?.get_latest_release().ok();
-			let available_assets = release.map_or_else(
-				|| "Could not fetch release info".to_string(),
-				|r| r.assets.iter().map(|a| a.name.clone()).collect::<Vec<_>>().join(", "),
-			);
-
-			argon_error!(
-				"Failed to update Argon: {}. No suitable binary found for your architecture. Available assets: {}",
-				err,
-				available_assets
-			);
-			Err(err)
 		} else {
-			// This case should technically be unreachable
-			argon_error!("Failed to update Argon: Unknown error occurred after trying all targets.");
-			Err(self_update::errors::Error::Update(
-				"Update failed after trying all targets, but no specific error was captured.".to_string(),
-			))
+			// No address, just kill the process
+			util::kill_process(session.pid);
+			info!("Stopped process with PID: {}", session.pid);
 		}
 	}
 
-	// For other architectures, use standard update
-	#[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
-	{
-		println!("DEBUG: Standard architecture detected, attempting standard update...");
-		let build_result = update_configure.build();
-		println!("DEBUG: Build result for standard update: {:?}", build_result.is_ok());
+	// Clear all session records
+	sessions::remove_all()?;
+	info!("All sessions stopped successfully");
 
-		if let Ok(updater) = build_result {
-			let update_result = updater.update();
-			println!("DEBUG: Update result for standard update: {:?}", update_result.is_ok());
-			match update_result {
-				Ok(_) => {
-					argon_info!("{}", Paint::green("Argon CLI updated successfully! 🚀"));
-					Ok(true)
-				}
-				Err(e) => {
-					println!("DEBUG: Standard update failed: {}", e);
-					argon_error!("Failed to update Argon: {}", e);
-					Err(e)
-				}
+	Ok(())
+}
+
+pub fn update_cli(auto_update: bool) -> Result<bool> {
+	let status = get_status()?;
+
+	if status.last_checked.elapsed()?.as_secs() < UPDATE_CHECK_INTERVAL {
+		debug!("Update was checked less than an hour ago, skipping..");
+		return Ok(false);
+	}
+
+	let current_version = env!("CARGO_PKG_VERSION");
+	let mut status = UpdateStatus {
+		last_checked: SystemTime::now(),
+		plugin_version: current_version.to_owned(),
+		templates_version: TEMPLATES_VERSION,
+		vscode_version: status.vscode_version,
+	};
+
+	let update = Update::configure()
+		.repo_owner("LupaHQ")
+		.repo_name("argon")
+		.bin_name("argon")
+		.current_version(current_version)
+		.build()?;
+
+	match update.get_latest_release() {
+		Ok(release) => {
+			if !bump_is_greater(&release.version, current_version)? {
+				debug!("No new version available");
+				set_status(&status)?;
+				return Ok(false);
 			}
-		} else {
-			let err = build_result.err().unwrap(); // We know it failed
-			println!("DEBUG: Failed to build standard updater: {}", err);
-			argon_error!("Failed to configure Argon update: {}", err);
-			Err(err)
+
+			status.plugin_version = release.version.clone();
+
+			if auto_update {
+				info!("New version {} is available, updating..", release.version);
+
+				// Stop running sessions before update
+				tokio::runtime::Runtime::new()?.block_on(stop_running_sessions())?;
+
+				match update.update()? {
+					Status::Updated(version) => {
+						argon_info!("Successfully updated to version {}!", version);
+						set_status(&status)?;
+						Ok(true)
+					}
+					Status::UpToDate(_) => {
+						argon_warn!("Already using the latest version!");
+						Ok(false)
+					}
+				}
+			} else {
+				argon_info!("New version {} is available! Run {}", release.version, "argon update");
+				Ok(false)
+			}
+		}
+		Err(err) => {
+			argon_error!("Failed to check for updates: {}", err);
+			bail!("Update check failed: {}", err);
 		}
 	}
 }
@@ -606,7 +546,7 @@ pub fn check_for_updates(plugin: bool, templates: bool, prompt: bool) -> Result<
 		return Ok(());
 	}
 
-	update_cli(false, false)?;
+	update_cli(false)?;
 
 	if plugin {
 		update_plugin(&mut status, prompt, false)?;
@@ -634,7 +574,7 @@ pub fn manual_update(cli: bool, plugin: bool, templates: bool, vscode: bool, for
 	// Update CLI first, as it might contain fixes for other update processes
 	if cli {
 		argon_info!("Checking for CLI updates...");
-		if update_cli(force, false)? {
+		if update_cli(force)? {
 			updated = true;
 		}
 	}
