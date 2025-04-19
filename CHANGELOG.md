@@ -5,13 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), that adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-[Unreleased]: https://github.com/LupaHQ/argon/compare/0.0.22...HEAD
+[Unreleased]: https://github.com/LupaHQ/argon/compare/0.0.23...HEAD
 
-## [0.0.22] - YYYY-MM-DD
+## [0.0.23] - 2024-04-24
+
+### Fixed
+
+- Fixed unnecessary dereferencing in `locate()` calls
+- Improved code formatting and style consistency
+- Fixed trace statement formatting for better readability
+
+## [0.0.22] - 2024-04-23
 
 ### Security
 
-- Hardcoded Pinecone API key directly into the binary to prevent exposure in configuration files.
+- Fixed hardcoded Pinecone API key
 
 ## [0.0.21] - YYYY-MM-DD
 

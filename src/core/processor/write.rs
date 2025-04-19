@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context as AnyhowContext, Result};
-use log::{debug, error, trace, warn};
+use log::{error, trace, warn};
 use path_clean::PathClean;
 use rbx_dom_weak::{types::Ref, HashMapExt, Instance, Ustr, UstrMap};
 use std::path::{Path, PathBuf};
@@ -36,7 +36,13 @@ macro_rules! filter_warn {
 }
 
 pub fn apply_addition(snapshot: AddedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Result<()> {
-	trace!("Adding Ref({:?}) '{}' [{}] with parent Ref({:?})", snapshot.id, snapshot.name, snapshot.class, snapshot.parent);
+	trace!(
+		"Adding Ref({:?}) '{}' [{}] with parent Ref({:?})",
+		snapshot.id,
+		snapshot.name,
+		snapshot.class,
+		snapshot.parent
+	);
 
 	if !tree.exists(snapshot.parent) {
 		warn!(
@@ -54,12 +60,15 @@ pub fn apply_addition(snapshot: AddedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 
 	trace!(
 		"Parent Instance: ID={:?}, Name='{}', Class='{}'",
-		parent_id, parent_instance.name, parent_instance.class
+		parent_id,
+		parent_instance.name,
+		parent_instance.class
 	);
 	trace!("Parent Meta Source: {:?}", parent_meta.source);
-	match vfs.get_path(&parent_id) {
-		Some(path) => trace!("Parent VFS Path Lookup: SUCCESS -> {}", path.display()),
-		None => trace!("Parent VFS Path Lookup: FAILED -> Path not found in VFS for Ref({:?})", parent_id),
+	if let Some(path) = parent_meta.source.get().path() {
+		trace!("Parent VFS Path Lookup: SUCCESS -> {}", path.display());
+	} else {
+		trace!("Parent VFS Path Lookup: FAILED -> No path found in source");
 	}
 
 	if filter.matches_name(&snapshot.name) || filter.matches_class(&snapshot.class) {
@@ -72,7 +81,9 @@ pub fn apply_addition(snapshot: AddedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 	fn locate_instance_data(is_dir: bool, path: &Path, snapshot: &Snapshot, parent_meta: &Meta) -> Result<PathBuf> {
 		trace!(
 			"locate_instance_data: Entering function with is_dir={}, path={}, snapshot_name={}",
-			is_dir, path.display(), snapshot.name
+			is_dir,
+			path.display(),
+			snapshot.name
 		);
 		let result = parent_meta
 			.context
@@ -99,7 +110,10 @@ pub fn apply_addition(snapshot: AddedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 	) -> Result<Option<Meta>> {
 		trace!(
 			"write_instance: Entering function with has_children={}, path={}, snapshot_name={}, snapshot_class={}",
-			has_children, path.display(), snapshot.name, snapshot.class
+			has_children,
+			path.display(),
+			snapshot.name,
+			snapshot.class
 		);
 		let mut meta = snapshot.meta.clone().with_context(&parent_meta.context);
 		let filter = parent_meta.context.syncback_filter();
@@ -146,7 +160,12 @@ pub fn apply_addition(snapshot: AddedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 					return Ok(None);
 				}
 
-				trace!("write_instance: Verified directory path: {}, updated name: {}, updated meta: {:?}", path.display(), snapshot.name, meta);
+				trace!(
+					"write_instance: Verified directory path: {}, updated name: {}, updated meta: {:?}",
+					path.display(),
+					snapshot.name,
+					meta
+				);
 
 				dir::write_dir(path, vfs)?;
 
@@ -160,7 +179,12 @@ pub fn apply_addition(snapshot: AddedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 					trace!("write_instance: Exiting function early (file path verification failed)");
 					return Ok(None);
 				}
-				trace!("write_instance: Verified file path: {}, updated name: {}, updated meta: {:?}", file_path.display(), snapshot.name, meta);
+				trace!(
+					"write_instance: Verified file path: {}, updated name: {}, updated meta: {:?}",
+					file_path.display(),
+					snapshot.name,
+					meta
+				);
 
 				meta.set_source(Source::file(&file_path));
 				trace!("write_instance: Set meta source to file: {:?}", meta.source);
@@ -173,7 +197,11 @@ pub fn apply_addition(snapshot: AddedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 			}
 
 			let properties = middleware.write(properties, &file_path, vfs)?;
-			trace!("write_instance: Middleware wrote to file: {}, remaining properties: {:?}", file_path.display(), properties);
+			trace!(
+				"write_instance: Middleware wrote to file: {}, remaining properties: {:?}",
+				file_path.display(),
+				properties
+			);
 			let data_path = locate_instance_data(has_children, path, snapshot, parent_meta)?;
 			trace!("write_instance: Located data path: {}", data_path.display());
 
@@ -187,7 +215,10 @@ pub fn apply_addition(snapshot: AddedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 				trace!("write_instance: Updated meta source with data path: {:?}", meta.source);
 			}
 		} else {
-			trace!("write_instance: No specific middleware found for class: {}", snapshot.class);
+			trace!(
+				"write_instance: No specific middleware found for class: {}",
+				snapshot.class
+			);
 			if filter.matches_path(path) {
 				filter_warn!(snapshot.id, path);
 				trace!("write_instance: Exiting function early (directory path filtered)");
@@ -199,7 +230,12 @@ pub fn apply_addition(snapshot: AddedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 				return Ok(None);
 			}
 
-			trace!("write_instance: Verified directory path: {}, updated name: {}, updated meta: {:?}", path.display(), snapshot.name, meta);
+			trace!(
+				"write_instance: Verified directory path: {}, updated name: {}, updated meta: {:?}",
+				path.display(),
+				snapshot.name,
+				meta
+			);
 
 			dir::write_dir(path, vfs)?;
 
@@ -236,24 +272,37 @@ pub fn apply_addition(snapshot: AddedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 	) -> Result<Source> {
 		trace!(
 			"add_non_project_instances: Entering function with parent_id={:?}, parent_path={}, snapshot_name={}",
-			parent_id, parent_path.display(), snapshot.name
+			parent_id,
+			parent_path.display(),
+			snapshot.name
 		);
 		let config = Config::new();
 
 		let mut parent_path = parent_path.to_owned();
-		trace!("add_non_project_instances: Initial parent_path: {}", parent_path.display());
+		trace!(
+			"add_non_project_instances: Initial parent_path: {}",
+			parent_path.display()
+		);
 
 		// Transform parent instance source from file to folder
 		let parent_source = if vfs.is_file(&parent_path) {
-			trace!("add_non_project_instances: Parent path {} is a file, transforming to folder source", parent_path.display());
+			trace!(
+				"add_non_project_instances: Parent path {} is a file, transforming to folder source",
+				parent_path.display()
+			);
 			let sync_rule = parent_meta
 				.context
 				.sync_rules()
 				.iter()
 				.filter(|rule| {
 					if let Some(pattern) = rule.child_pattern.as_ref() {
-						let skip = (pattern.as_str().starts_with(".src") || pattern.as_str().ends_with(".data.json")) && config.rojo_mode;
-						trace!("add_non_project_instances: Filtering sync rule: {:?}, skip={}", rule, skip);
+						let skip = (pattern.as_str().starts_with(".src") || pattern.as_str().ends_with(".data.json"))
+							&& config.rojo_mode;
+						trace!(
+							"add_non_project_instances: Filtering sync rule: {:?}, skip={}",
+							rule,
+							skip
+						);
 						!skip
 					} else {
 						true
@@ -261,7 +310,12 @@ pub fn apply_addition(snapshot: AddedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 				})
 				.find(|rule| {
 					let matches = rule.matches(&parent_path);
-					trace!("add_non_project_instances: Checking sync rule {:?} against path {}: matches={}", rule, parent_path.display(), matches);
+					trace!(
+						"add_non_project_instances: Checking sync rule {:?} against path {}: matches={}",
+						rule,
+						parent_path.display(),
+						matches
+					);
 					matches
 				})
 				.with_context(|| format!("Failed to find sync rule for path: {}", parent_path.display()))?
@@ -272,23 +326,40 @@ pub fn apply_addition(snapshot: AddedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 			let name = sync_rule.get_name(&parent_path);
 			trace!("add_non_project_instances: Extracted name from sync rule: {}", name);
 			let mut folder_path = parent_path.with_file_name(&name);
-			trace!("add_non_project_instances: Proposed folder path: {}", folder_path.display());
+			trace!(
+				"add_non_project_instances: Proposed folder path: {}",
+				folder_path.display()
+			);
 
 			if !verify_path(&mut folder_path, &mut snapshot.name, parent_meta, vfs) {
-				trace!("add_non_project_instances: Folder path verification failed, returning original parent source: {:?}", parent_meta.source);
+				trace!(
+					"add_non_project_instances: Folder path verification failed, returning original parent source: {:?}",
+					parent_meta.source
+				);
 				return Ok(parent_meta.source.clone());
 			}
 
-			trace!("add_non_project_instances: Verified folder path: {}, updated name: {}, updated meta: {:?}", folder_path.display(), snapshot.name, parent_meta);
+			trace!(
+				"add_non_project_instances: Verified folder path: {}, updated name: {}, updated meta: {:?}",
+				folder_path.display(),
+				snapshot.name,
+				parent_meta
+			);
 
 			let file_path = sync_rule
 				.locate(&folder_path, &name, true)
 				.with_context(|| format!("Failed to locate file path for parent: {}", folder_path.display()))?;
 
-			trace!("add_non_project_instances: Located new file path within folder: {}", file_path.display());
+			trace!(
+				"add_non_project_instances: Located new file path within folder: {}",
+				file_path.display()
+			);
 
 			let data_paths = if let Some(data) = parent_meta.source.get_data() {
-				trace!("add_non_project_instances: Found existing data path: {}", data.path().display());
+				trace!(
+					"add_non_project_instances: Found existing data path: {}",
+					data.path().display()
+				);
 				let new_path = parent_meta
 					.context
 					.sync_rules_of_type(&Middleware::InstanceData, true)
@@ -296,7 +367,10 @@ pub fn apply_addition(snapshot: AddedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 					.find_map(|rule| rule.locate(&folder_path, &name, true))
 					.with_context(|| format!("Failed to locate data path for parent: {}", folder_path.display()))?;
 
-				trace!("add_non_project_instances: Located new data path: {}", new_path.display());
+				trace!(
+					"add_non_project_instances: Located new data path: {}",
+					new_path.display()
+				);
 				Some((data.path().to_owned(), new_path))
 			} else {
 				trace!("add_non_project_instances: No existing data path found.");
@@ -307,19 +381,36 @@ pub fn apply_addition(snapshot: AddedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 			trace!("add_non_project_instances: Created new child_file source: {:?}", source);
 
 			dir::write_dir(&folder_path, vfs)?;
-			trace!("add_non_project_instances: Wrote new directory: {}", folder_path.display());
+			trace!(
+				"add_non_project_instances: Wrote new directory: {}",
+				folder_path.display()
+			);
 			vfs.rename(&parent_path, &file_path)?;
-			trace!("add_non_project_instances: Renamed original file {} to {}", parent_path.display(), file_path.display());
+			trace!(
+				"add_non_project_instances: Renamed original file {} to {}",
+				parent_path.display(),
+				file_path.display()
+			);
 
 			if let Some(data_paths) = data_paths {
-				trace!("add_non_project_instances: Processing data path rename from {} to {}", data_paths.0.display(), data_paths.1.display());
+				trace!(
+					"add_non_project_instances: Processing data path rename from {} to {}",
+					data_paths.0.display(),
+					data_paths.1.display()
+				);
 				source.add_data(&data_paths.1);
 				vfs.rename(&data_paths.0, &data_paths.1)?;
-				trace!("add_non_project_instances: Renamed data file and updated source: {:?}", source);
+				trace!(
+					"add_non_project_instances: Renamed data file and updated source: {:?}",
+					source
+				);
 			}
 
 			parent_path = folder_path;
-			trace!("add_non_project_instances: Updated parent_path to new folder path: {}", parent_path.display());
+			trace!(
+				"add_non_project_instances: Updated parent_path to new folder path: {}",
+				parent_path.display()
+			);
 
 			source
 		} else {
@@ -328,11 +419,19 @@ pub fn apply_addition(snapshot: AddedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 		};
 
 		if !verify_name(&mut snapshot.name, &mut snapshot.meta) {
-			trace!("add_non_project_instances: Name verification failed for {}, returning parent source: {:?}", snapshot.name, parent_source);
+			trace!(
+				"add_non_project_instances: Name verification failed for {}, returning parent source: {:?}",
+				snapshot.name,
+				parent_source
+			);
 			return Ok(parent_source);
 		}
 
-		trace!("add_non_project_instances: Verified name: {}, updated meta: {:?}", snapshot.name, snapshot.meta);
+		trace!(
+			"add_non_project_instances: Verified name: {}, updated meta: {:?}",
+			snapshot.name,
+			snapshot.meta
+		);
 
 		let mut path = parent_path.join(&snapshot.name);
 		trace!("add_non_project_instances: Constructed child path: {}", path.display());
@@ -341,32 +440,45 @@ pub fn apply_addition(snapshot: AddedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 			trace!("add_non_project_instances: Snapshot has no children, writing as potential file");
 			if let Some(meta) = write_instance(false, &mut path, &mut snapshot, parent_meta, vfs)? {
 				trace!("add_non_project_instances: write_instance succeeded, meta: {:?}", meta);
+				let snapshot_id = snapshot.id;
 				let snapshot = snapshot.with_meta(meta);
-
-				tree.insert_instance_with_ref(snapshot, parent_id);
-				trace!("add_non_project_instances: Inserted instance into tree: {:?}", snapshot.id);
+				tree.insert_instance_with_ref(snapshot.clone(), parent_id);
+				trace!(
+					"add_non_project_instances: Inserted instance into tree: {:?}",
+					snapshot_id
+				);
 			} else {
 				trace!("add_non_project_instances: write_instance returned None, instance not added.");
 			}
 		} else if let Some(mut meta) = write_instance(true, &mut path, &mut snapshot, parent_meta, vfs)? {
 			trace!("add_non_project_instances: Snapshot has children, writing as potential directory");
 			trace!("add_non_project_instances: write_instance succeeded, meta: {:?}", meta);
+			let snapshot_id = snapshot.id;
 			let snapshot = snapshot.with_meta(meta.clone());
 
 			tree.insert_instance_with_ref(snapshot.clone(), parent_id);
-			trace!("add_non_project_instances: Inserted instance into tree: {:?}", snapshot.id);
+			trace!(
+				"add_non_project_instances: Inserted instance into tree: {:?}",
+				snapshot_id
+			);
 
 			for mut child in snapshot.children {
 				trace!("add_non_project_instances: Processing child: {:?}", child.id);
 				child.properties = validate_properties(child.properties.clone(), meta.context.syncback_filter());
-				trace!("add_non_project_instances: Validated child properties: {:?}", child.properties);
+				trace!(
+					"add_non_project_instances: Validated child properties: {:?}",
+					child.properties
+				);
 				add_non_project_instances(snapshot.id, &path, child, &mut meta, tree, vfs)?;
 			}
 		} else {
 			trace!("add_non_project_instances: write_instance returned None, instance and children not added.");
 		}
 
-		trace!("add_non_project_instances: Exiting function successfully, returning parent_source: {:?}", parent_source);
+		trace!(
+			"add_non_project_instances: Exiting function successfully, returning parent_source: {:?}",
+			parent_source
+		);
 		Ok(parent_source)
 	}
 
@@ -381,7 +493,10 @@ pub fn apply_addition(snapshot: AddedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 	) {
 		trace!(
 			"add_project_instances: Entering function with parent_id={:?}, path={}, node_path={:?}, snapshot_name={}",
-			parent_id, path.display(), node_path, snapshot.name
+			parent_id,
+			path.display(),
+			node_path,
+			snapshot.name
 		);
 		let mut node = ProjectNode {
 			class_name: Some(snapshot.class),
@@ -416,21 +531,33 @@ pub fn apply_addition(snapshot: AddedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 		for mut child in snapshot.children {
 			trace!("add_project_instances: Processing child: {:?}", child.id);
 			child.properties = validate_properties(child.properties, filter);
-			trace!("add_project_instances: Validated child properties: {:?}", child.properties);
+			trace!(
+				"add_project_instances: Validated child properties: {:?}",
+				child.properties
+			);
 			add_project_instances(parent_id, path, node_path.clone(), child, &mut node, parent_meta, tree);
 		}
 
 		parent_node.tree.insert(snapshot.name.clone(), node);
-		trace!("add_project_instances: Inserted node for {} into parent node's tree", snapshot.name);
+		trace!(
+			"add_project_instances: Inserted node for {} into parent node's tree",
+			snapshot.name
+		);
 		trace!("add_project_instances: Exiting function");
 	}
 
-	trace!("apply_addition: Matching parent source kind: {:?}", parent_meta.source.get());
+	trace!(
+		"apply_addition: Matching parent source kind: {:?}",
+		parent_meta.source.get()
+	);
 	match parent_meta.source.get().clone() {
 		SourceKind::Path(path) => {
 			trace!("apply_addition: Parent source is Path: {}", path.display());
 			let parent_source = add_non_project_instances(parent_id, &path, snapshot, &mut parent_meta, tree, vfs)?;
-			trace!("apply_addition: add_non_project_instances returned parent_source: {:?}", parent_source);
+			trace!(
+				"apply_addition: add_non_project_instances returned parent_source: {:?}",
+				parent_source
+			);
 
 			parent_meta.set_source(parent_source);
 			tree.update_meta(parent_id, parent_meta);
@@ -439,18 +566,14 @@ pub fn apply_addition(snapshot: AddedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 		SourceKind::Project(name, path, node, node_path) => {
 			trace!(
 				"apply_addition: Parent source is Project: name={}, path={}, node_path={:?}",
-				name, path.display(), node_path
+				name,
+				path.display(),
+				node_path
 			);
 			if let Some(custom_path) = &node.path {
-				trace!(
-					"apply_addition: Parent project node has custom path: {:?}",
-					custom_path
-				);
+				trace!("apply_addition: Parent project node has custom path: {:?}", custom_path);
 				let custom_path = path.with_file_name(custom_path.path()).clean();
-				trace!(
-					"apply_addition: Resolved custom path: {}",
-					custom_path.display()
-				);
+				trace!("apply_addition: Resolved custom path: {}", custom_path.display());
 
 				let parent_source =
 					add_non_project_instances(parent_id, &custom_path, snapshot, &mut parent_meta, tree, vfs)?;
@@ -521,22 +644,34 @@ pub fn apply_update(snapshot: UpdatedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 			return Ok(());
 		}
 	} else {
-		warn!("apply_update: Attempted to update instance that doesn't exist: {:?}", snapshot.id);
+		warn!(
+			"apply_update: Attempted to update instance that doesn't exist: {:?}",
+			snapshot.id
+		);
 		trace!("apply_update: Exiting function early (instance does not exist)");
 		return Ok(());
 	}
 
 	let mut meta = tree.get_meta(snapshot.id).unwrap().clone();
 	let instance = tree.get_instance_mut(snapshot.id).unwrap();
-	trace!("apply_update: Got meta: {:?} and mutable instance: {:?}", meta, instance);
+	trace!(
+		"apply_update: Got meta: {:?} and mutable instance: {:?}",
+		meta,
+		instance
+	);
 
 	fn locate_instance_data(name: &str, path: &Path, meta: &Meta, vfs: &Vfs) -> Option<PathBuf> {
 		trace!(
 			"locate_instance_data (update): Entering function with name={}, path={}, meta={:?}",
-			name, path.display(), meta
+			name,
+			path.display(),
+			meta
 		);
 		let data_path = if let Some(data) = meta.source.get_data() {
-			trace!("locate_instance_data (update): Found existing data path in meta: {}", data.path().display());
+			trace!(
+				"locate_instance_data (update): Found existing data path in meta: {}",
+				data.path().display()
+			);
 			Some(data.path().to_owned())
 		} else {
 			trace!("locate_instance_data (update): No data path in meta, searching using sync rules");
@@ -552,7 +687,10 @@ pub fn apply_update(snapshot: UpdatedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 		};
 
 		if data_path.is_none() {
-			warn!("locate_instance_data (update): Failed to locate instance data for {}", path.display())
+			warn!(
+				"locate_instance_data (update): Failed to locate instance data for {}",
+				path.display()
+			)
 		}
 		trace!("locate_instance_data (update): Result: {:?}", data_path);
 		trace!("locate_instance_data (update): Exiting function");
@@ -568,7 +706,10 @@ pub fn apply_update(snapshot: UpdatedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 	) -> Result<()> {
 		trace!(
 			"update_non_project_properties: Entering function with path={}, properties={:?}, instance={:?}, meta={:?}",
-			path.display(), properties, instance.referent(), meta
+			path.display(),
+			properties,
+			instance.referent(),
+			meta
 		);
 		let filter = meta.context.syncback_filter();
 		trace!("update_non_project_properties: Filter: {:?}", filter);
@@ -603,17 +744,24 @@ pub fn apply_update(snapshot: UpdatedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 					trace!("update_non_project_properties: Rule locate result: {:?}", located);
 					located
 				});
-			trace!("update_non_project_properties: Located potential new file path: {:?}", new_path);
+			trace!(
+				"update_non_project_properties: Located potential new file path: {:?}",
+				new_path
+			);
 
 			let file_path = if let Some(SourceEntry::File(path_entry)) = meta.source.get_file_mut() {
 				let mut current_path = path_entry.to_owned();
-				trace!("update_non_project_properties: Found existing file path in meta: {}", current_path.display());
+				trace!(
+					"update_non_project_properties: Found existing file path in meta: {}",
+					current_path.display()
+				);
 
 				if let Some(new_path) = new_path {
 					if current_path != new_path {
 						trace!(
 							"update_non_project_properties: Renaming file path from {} to {}",
-							current_path.display(), new_path.display()
+							current_path.display(),
+							new_path.display()
 						);
 						vfs.rename(&current_path, &new_path)?;
 
@@ -628,40 +776,65 @@ pub fn apply_update(snapshot: UpdatedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 			} else {
 				trace!("update_non_project_properties: No existing file path in meta.");
 				if let Some(new_path) = &new_path {
-					trace!("update_non_project_properties: Adding located path {} to meta", new_path.display());
+					trace!(
+						"update_non_project_properties: Adding located path {} to meta",
+						new_path.display()
+					);
 					meta.source.add_file(new_path);
 				}
 
 				new_path
 			};
 
-			trace!("update_non_project_properties: Final file_path for writing: {:?}", file_path);
+			trace!(
+				"update_non_project_properties: Final file_path for writing: {:?}",
+				file_path
+			);
 
 			if let Some(file_path) = file_path {
-				trace!("update_non_project_properties: Writing properties using middleware to {}", file_path.display());
+				trace!(
+					"update_non_project_properties: Writing properties using middleware to {}",
+					file_path.display()
+				);
 				let properties = middleware.write(properties.clone(), &file_path, vfs)?;
-				trace!("update_non_project_properties: Middleware write complete, remaining properties: {:?}", properties);
+				trace!(
+					"update_non_project_properties: Middleware write complete, remaining properties: {:?}",
+					properties
+				);
 
 				if let Some(data_path) = locate_instance_data(&instance.name, path, meta, vfs) {
-					trace!("update_non_project_properties: Located data path: {}", data_path.display());
+					trace!(
+						"update_non_project_properties: Located data path: {}",
+						data_path.display()
+					);
 					if filter.matches_path(&data_path) {
 						filter_warn!(instance.referent(), &data_path);
 						trace!("update_non_project_properties: Data path filtered, skipping data write.");
 					} else {
 						trace!("update_non_project_properties: Writing data to {}", data_path.display());
-						let data_path = data::write_data(true, &instance.class, properties.clone(), &data_path, meta, vfs)?;
+						let data_path =
+							data::write_data(true, &instance.class, properties.clone(), &data_path, meta, vfs)?;
 						trace!("update_non_project_properties: Wrote data to path: {:?}", data_path);
 						meta.source.set_data(data_path);
-						trace!("update_non_project_properties: Updated meta source with data path: {:?}", meta.source);
+						trace!(
+							"update_non_project_properties: Updated meta source with data path: {:?}",
+							meta.source
+						);
 					}
 				} else {
 					trace!("update_non_project_properties: Could not locate data path, skipping data write.");
 				}
 			} else {
-				error!("update_non_project_properties: Failed to locate file for path {:?}", path.display());
+				error!(
+					"update_non_project_properties: Failed to locate file for path {:?}",
+					path.display()
+				);
 			}
 		} else if let Some(data_path) = locate_instance_data(&instance.name, path, meta, vfs) {
-			trace!("update_non_project_properties: No middleware found, but located data path: {}", data_path.display());
+			trace!(
+				"update_non_project_properties: No middleware found, but located data path: {}",
+				data_path.display()
+			);
 			if filter.matches_path(&data_path) {
 				filter_warn!(instance.referent(), &data_path);
 				trace!("update_non_project_properties: Data path filtered, skipping data write.");
@@ -670,17 +843,25 @@ pub fn apply_update(snapshot: UpdatedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 				let data_path = data::write_data(false, &instance.class, properties.clone(), &data_path, meta, vfs)?;
 				trace!("update_non_project_properties: Wrote data to path: {:?}", data_path);
 				meta.source.set_data(data_path);
-				trace!("update_non_project_properties: Updated meta source with data path: {:?}", meta.source);
+				trace!(
+					"update_non_project_properties: Updated meta source with data path: {:?}",
+					meta.source
+				);
 			}
 		} else {
-			trace!("update_non_project_properties: No middleware and could not locate data path, skipping property write.");
+			trace!(
+				"update_non_project_properties: No middleware and could not locate data path, skipping property write."
+			);
 		}
 
 		instance.properties = properties;
-		trace!("update_non_project_properties: Updated instance properties in tree: {:?}", instance.properties);
+		trace!(
+			"update_non_project_properties: Updated instance properties in tree: {:?}",
+			instance.properties
+		);
 
 		trace!("update_non_project_properties: Exiting function successfully");
-		Ok(()))
+		Ok(())
 	}
 
 	trace!("apply_update: Matching source kind: {:?}", meta.source.get());
@@ -702,10 +883,18 @@ pub fn apply_update(snapshot: UpdatedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 				trace!("apply_update: Calculated new path based on rename: {}", path.display());
 
 				if !verify_path(&mut path, &mut name, &mut meta, vfs) {
-					trace!("apply_update: Path verification failed for {}, exiting early.", path.display());
+					trace!(
+						"apply_update: Path verification failed for {}, exiting early.",
+						path.display()
+					);
 					return Ok(());
 				}
-				trace!("apply_update: Verified path: {}, updated name: {}, updated meta: {:?}", path.display(), name, meta);
+				trace!(
+					"apply_update: Verified path: {}, updated name: {}, updated meta: {:?}",
+					path.display(),
+					name,
+					meta
+				);
 
 				*meta.source.get_mut() = SourceKind::Path(path.clone());
 				trace!("apply_update: Updated source kind in meta: {:?}", meta.source.get());
@@ -715,7 +904,10 @@ pub fn apply_update(snapshot: UpdatedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 
 				if let Some(SourceEntry::Folder(folder_path_entry)) = meta.source.get_folder_mut() {
 					let current_folder_path = folder_path_entry.to_owned();
-					trace!("apply_update: Renaming folder source from {}", current_folder_path.display());
+					trace!(
+						"apply_update: Renaming folder source from {}",
+						current_folder_path.display()
+					);
 					let new_path = current_folder_path.with_file_name(&name);
 					trace!("apply_update: New folder path: {}", new_path.display());
 
@@ -723,7 +915,11 @@ pub fn apply_update(snapshot: UpdatedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 						filter_warn!(snapshot.id, &current_folder_path);
 						trace!("apply_update: Both old and new folder paths filtered, skipping rename.");
 					} else {
-						trace!("apply_update: Performing VFS rename for folder: {} -> {}", current_folder_path.display(), new_path.display());
+						trace!(
+							"apply_update: Performing VFS rename for folder: {} -> {}",
+							current_folder_path.display(),
+							new_path.display()
+						);
 						vfs.rename(&current_folder_path, &new_path)?;
 						*folder_path_entry = new_path.clone();
 						trace!("apply_update: Updated folder path in meta source.");
@@ -734,7 +930,11 @@ pub fn apply_update(snapshot: UpdatedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 								SourceEntry::File(path_entry) | SourceEntry::Data(path_entry) => {
 									let original_relevant_path = path_entry.clone();
 									*path_entry = new_path.join(path_entry.get_name());
-									trace!("apply_update: Updated relevant path from {} to {}", original_relevant_path.display(), path_entry.display());
+									trace!(
+										"apply_update: Updated relevant path from {} to {}",
+										original_relevant_path.display(),
+										path_entry.display()
+									);
 								}
 								_ => {
 									trace!("apply_update: Skipping non-file/data relevant entry.");
@@ -759,7 +959,11 @@ pub fn apply_update(snapshot: UpdatedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 									continue;
 								}
 
-								trace!("apply_update: Performing VFS rename for relevant path: {} -> {}", current_path.display(), new_path.display());
+								trace!(
+									"apply_update: Performing VFS rename for relevant path: {} -> {}",
+									current_path.display(),
+									new_path.display()
+								);
 								vfs.rename(&current_path, &new_path)?;
 								*path_entry = new_path;
 								trace!("apply_update: Updated relevant path in meta source.");
@@ -775,7 +979,10 @@ pub fn apply_update(snapshot: UpdatedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 				if original_name != meta.original_name && snapshot.properties.is_none() {
 					trace!("apply_update: Name changed and no properties updated, attempting to write original name metadata.");
 					if let Some(data_path) = locate_instance_data(&name, &path, &meta, vfs) {
-						trace!("apply_update: Located data path for original name metadata: {}", data_path.display());
+						trace!(
+							"apply_update: Located data path for original name metadata: {}",
+							data_path.display()
+						);
 						if filter.matches_path(&data_path) {
 							filter_warn!(instance.referent(), &data_path);
 							trace!("apply_update: Data path filtered, skipping original name write.");
@@ -804,26 +1011,37 @@ pub fn apply_update(snapshot: UpdatedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 
 			if let Some(class) = snapshot.class {
 				// You can't change the class of an instance inside Roblox Studio
-				warn!("apply_update: Received unexpected class update for {:?} to {}, ignoring.", snapshot.id, class);
+				warn!(
+					"apply_update: Received unexpected class update for {:?} to {}, ignoring.",
+					snapshot.id, class
+				);
 				unreachable!()
 			}
 
 			if let Some(meta_update) = snapshot.meta {
 				// Currently Argon client does not update meta
-				warn!("apply_update: Received unexpected meta update for {:?}: {:?}, ignoring.", snapshot.id, meta_update);
+				warn!(
+					"apply_update: Received unexpected meta update for {:?}: {:?}, ignoring.",
+					snapshot.id, meta_update
+				);
 				unreachable!()
 			}
 		}
 		SourceKind::Project(name, path, node, node_path) => {
 			trace!(
 				"apply_update: Source is Project: name={}, path={}, node_path={:?}",
-				name, path.display(), node_path
+				name,
+				path.display(),
+				node_path
 			);
 			let mut project = Project::load(&path)?;
 			trace!("apply_update: Loaded project from {}", path.display());
 
 			if let Some(properties) = snapshot.properties {
-				trace!("apply_update: Handling property update for project node: {:?}", properties);
+				trace!(
+					"apply_update: Handling property update for project node: {:?}",
+					properties
+				);
 				if let Some(custom_path) = node.path {
 					trace!("apply_update: Project node has custom path: {:?}", custom_path);
 					let custom_path = path.with_file_name(custom_path.path()).clean();
@@ -856,12 +1074,18 @@ pub fn apply_update(snapshot: UpdatedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 					trace!("apply_update: Validated properties for project node: {:?}", properties);
 
 					node.properties = serialize_properties(&class, properties.clone());
-					trace!("apply_update: Serialized and set properties on project node: {:?}", node.properties);
+					trace!(
+						"apply_update: Serialized and set properties on project node: {:?}",
+						node.properties
+					);
 					node.tags = vec![]; // TODO: Handle tags if necessary
 					node.keep_unknowns = None; // TODO: Handle keep_unknowns
 
 					instance.properties = properties;
-					trace!("apply_update: Updated instance properties in tree: {:?}", instance.properties);
+					trace!(
+						"apply_update: Updated instance properties in tree: {:?}",
+						instance.properties
+					);
 				}
 			} else {
 				trace!("apply_update: No properties to update for project node.");
@@ -871,10 +1095,13 @@ pub fn apply_update(snapshot: UpdatedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 			if let Some(new_name) = snapshot.name {
 				trace!("apply_update: Handling name update for project node to: {}", new_name);
 				let parent_node_path = node_path.parent();
-				trace!("apply_update: Finding parent project node at path: {:?}", parent_node_path);
-				let parent_node = project.find_node_by_path(&parent_node_path).with_context(|| {
-					format!("Failed to find parent project node with path {:?}", parent_node_path)
-				})?;
+				trace!(
+					"apply_update: Finding parent project node at path: {:?}",
+					parent_node_path
+				);
+				let parent_node = project
+					.find_node_by_path(&parent_node_path)
+					.with_context(|| format!("Failed to find parent project node with path {:?}", parent_node_path))?;
 				trace!("apply_update: Found parent project node.");
 
 				trace!("apply_update: Removing old node '{}' from parent's tree", name);
@@ -884,7 +1111,10 @@ pub fn apply_update(snapshot: UpdatedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 					.context(format!("Failed to remove project node with path {:?}", node_path))?;
 				trace!("apply_update: Removed node: {:?}", node);
 
-				trace!("apply_update: Inserting node with new name '{}' into parent's tree", new_name);
+				trace!(
+					"apply_update: Inserting node with new name '{}' into parent's tree",
+					new_name
+				);
 				parent_node.tree.insert(new_name.clone(), node.clone());
 
 				let new_node_path = parent_node_path.join(&new_name);
@@ -907,18 +1137,27 @@ pub fn apply_update(snapshot: UpdatedSnapshot, tree: &mut Tree, vfs: &Vfs) -> Re
 
 			if let Some(class) = snapshot.class {
 				// You can't change the class of an instance inside Roblox Studio
-				warn!("apply_update: Received unexpected class update for project node {:?} to {}, ignoring.", snapshot.id, class);
+				warn!(
+					"apply_update: Received unexpected class update for project node {:?} to {}, ignoring.",
+					snapshot.id, class
+				);
 				unreachable!()
 			}
 
 			if let Some(meta_update) = snapshot.meta {
 				// Currently Argon client does not update meta
-				warn!("apply_update: Received unexpected meta update for project node {:?}: {:?}, ignoring.", snapshot.id, meta_update);
+				warn!(
+					"apply_update: Received unexpected meta update for project node {:?}: {:?}, ignoring.",
+					snapshot.id, meta_update
+				);
 				unreachable!()
 			}
 		}
 		SourceKind::None => {
-			let msg = format!("apply_update: Attempted to update instance {:?} with no source", snapshot.id);
+			let msg = format!(
+				"apply_update: Attempted to update instance {:?} with no source",
+				snapshot.id
+			);
 			error!("{}", msg);
 			panic!("{}", msg);
 		}
@@ -941,7 +1180,10 @@ pub fn apply_removal(id: Ref, tree: &mut Tree, vfs: &Vfs) -> Result<()> {
 			return Ok(());
 		}
 	} else {
-		warn!("apply_removal: Attempted to remove instance that doesn't exist: {:?}", id);
+		warn!(
+			"apply_removal: Attempted to remove instance that doesn't exist: {:?}",
+			id
+		);
 		trace!("apply_removal: Exiting function early (instance does not exist)");
 		return Ok(());
 	}
@@ -950,12 +1192,19 @@ pub fn apply_removal(id: Ref, tree: &mut Tree, vfs: &Vfs) -> Result<()> {
 	trace!("apply_removal: Got meta for instance {:?}: {:?}", id, meta);
 
 	fn remove_non_project_instances(id: Ref, meta: &Meta, tree: &mut Tree, vfs: &Vfs) -> Result<()> {
-		trace!("remove_non_project_instances: Entering function with id={:?}, meta={:?}", id, meta);
+		trace!(
+			"remove_non_project_instances: Entering function with id={:?}, meta={:?}",
+			id,
+			meta
+		);
 		let filter = meta.context.syncback_filter();
 		trace!("remove_non_project_instances: Filter: {:?}", filter);
 
 		for entry in meta.source.relevant() {
-			trace!("remove_non_project_instances: Processing relevant source entry: {:?}", entry);
+			trace!(
+				"remove_non_project_instances: Processing relevant source entry: {:?}",
+				entry
+			);
 			match entry {
 				SourceEntry::Project(_) => {
 					trace!("remove_non_project_instances: Skipping project entry.");
@@ -989,11 +1238,18 @@ pub fn apply_removal(id: Ref, tree: &mut Tree, vfs: &Vfs) -> Result<()> {
 			.get_instance(id)
 			.and_then(|instance| {
 				let parent_id = instance.parent();
-				trace!("remove_non_project_instances: Instance {:?} parent ID: {:?}", id, parent_id);
+				trace!(
+					"remove_non_project_instances: Instance {:?} parent ID: {:?}",
+					id,
+					parent_id
+				);
 				tree.get_instance(parent_id)
 			})
 			.context("Instance has no parent or parent does not exist in tree")?;
-		trace!("remove_non_project_instances: Found parent instance: {:?}", parent.referent());
+		trace!(
+			"remove_non_project_instances: Found parent instance: {:?}",
+			parent.referent()
+		);
 
 		if parent.children().len() != 1 {
 			trace!(
@@ -1003,50 +1259,70 @@ pub fn apply_removal(id: Ref, tree: &mut Tree, vfs: &Vfs) -> Result<()> {
 			return Ok(());
 		}
 
-		trace!("remove_non_project_instances: Parent {:?} has only 1 child remaining, proceeding with potential transformation.");
+		trace!(
+			"remove_non_project_instances: Parent {:?} has only 1 child remaining, proceeding with potential transformation.",
+			parent.referent()
+		);
 		let parent_ref = parent.referent();
 		let meta = tree.get_meta_mut(parent_ref).unwrap();
 		trace!("remove_non_project_instances: Got mutable meta for parent: {:?}", meta);
 
 		if let SourceKind::Path(folder_path) = meta.source.get().clone() {
-			trace!("remove_non_project_instances: Parent source is Path (potential folder): {}", folder_path.display());
+			trace!(
+				"remove_non_project_instances: Parent source is Path (potential folder): {}",
+				folder_path.display()
+			);
 			let name = folder_path.get_name();
 			trace!("remove_non_project_instances: Parent folder name: {}", name);
 
 			if let Some(file_entry) = meta.source.get_file().cloned() {
 				let file_path_in_folder = file_entry.path();
-				trace!("remove_non_project_instances: Parent meta has associated file: {}", file_path_in_folder.display());
-				let file_path_outside_folder = meta
-					.context
-					.sync_rules()
-					.iter()
-					.find(|rule| {
-						let matches = rule.matches_child(file_path_in_folder);
-						trace!(
+				trace!(
+					"remove_non_project_instances: Parent meta has associated file: {}",
+					file_path_in_folder.display()
+				);
+				let file_path_outside_folder =
+					meta.context
+						.sync_rules()
+						.iter()
+						.find(|rule| {
+							let matches = rule.matches_child(file_path_in_folder);
+							trace!(
 							"remove_non_project_instances: Checking sync rule {:?} against child file {}: matches={}",
 							rule, file_path_in_folder.display(), matches
 						);
-						matches
-					})
-					.and_then(|rule| {
-						let located = rule.locate(&folder_path, name, false);
-						trace!("remove_non_project_instances: Located potential new path using rule {:?}: {:?}", rule, located);
-						located
-					});
+							matches
+						})
+						.and_then(|rule| {
+							let located = rule.locate(&folder_path, name, false);
+							trace!(
+								"remove_non_project_instances: Located potential new path using rule {:?}: {:?}",
+								rule,
+								located
+							);
+							located
+						});
 
 				if let Some(new_path) = file_path_outside_folder {
-					trace!("remove_non_project_instances: Located new path for file: {}", new_path.display());
+					trace!(
+						"remove_non_project_instances: Located new path for file: {}",
+						new_path.display()
+					);
 					vfs.rename(file_path_in_folder, &new_path)?;
 					trace!(
 						"remove_non_project_instances: Renamed file {} to {}",
-						file_path_in_folder.display(), new_path.display()
+						file_path_in_folder.display(),
+						new_path.display()
 					);
 					let mut source = Source::file(&new_path);
 					trace!("remove_non_project_instances: Created new file source: {:?}", source);
 
 					if let Some(data_entry) = meta.source.get_data().cloned() {
 						let data_path_in_folder = data_entry.path();
-						trace!("remove_non_project_instances: Parent meta has associated data: {}", data_path_in_folder.display());
+						trace!(
+							"remove_non_project_instances: Parent meta has associated data: {}",
+							data_path_in_folder.display()
+						);
 						let data_path_outside_folder = meta
 							.context
 							.sync_rules_of_type(&Middleware::InstanceData, true)
@@ -1061,14 +1337,21 @@ pub fn apply_removal(id: Ref, tree: &mut Tree, vfs: &Vfs) -> Result<()> {
 							});
 
 						if let Some(new_data_path) = data_path_outside_folder {
-							trace!("remove_non_project_instances: Located new path for data: {}", new_data_path.display());
+							trace!(
+								"remove_non_project_instances: Located new path for data: {}",
+								new_data_path.display()
+							);
 							vfs.rename(data_path_in_folder, &new_data_path)?;
 							trace!(
 								"remove_non_project_instances: Renamed data {} to {}",
-								data_path_in_folder.display(), new_data_path.display()
+								data_path_in_folder.display(),
+								new_data_path.display()
 							);
 							source.add_data(&new_data_path);
-							trace!("remove_non_project_instances: Added data path to new source: {:?}", source);
+							trace!(
+								"remove_non_project_instances: Added data path to new source: {:?}",
+								source
+							);
 						} else {
 							trace!("remove_non_project_instances: Could not locate new path for data.");
 						}
@@ -1077,9 +1360,15 @@ pub fn apply_removal(id: Ref, tree: &mut Tree, vfs: &Vfs) -> Result<()> {
 					}
 
 					vfs.remove(&folder_path)?;
-					trace!("remove_non_project_instances: Removed original folder {}", folder_path.display());
+					trace!(
+						"remove_non_project_instances: Removed original folder {}",
+						folder_path.display()
+					);
 					meta.set_source(source);
-					trace!("remove_non_project_instances: Set parent meta source to new file source: {:?}", meta.source);
+					trace!(
+						"remove_non_project_instances: Set parent meta source to new file source: {:?}",
+						meta.source
+					);
 				} else {
 					trace!("remove_non_project_instances: Could not locate new path for file, transformation aborted.");
 				}
@@ -1091,7 +1380,7 @@ pub fn apply_removal(id: Ref, tree: &mut Tree, vfs: &Vfs) -> Result<()> {
 		}
 
 		trace!("remove_non_project_instances: Exiting function successfully");
-		Ok(()))
+		Ok(())
 	}
 
 	trace!("apply_removal: Matching source kind: {:?}", meta.source.get());
@@ -1103,16 +1392,21 @@ pub fn apply_removal(id: Ref, tree: &mut Tree, vfs: &Vfs) -> Result<()> {
 		SourceKind::Project(name, path, node, node_path) => {
 			trace!(
 				"apply_removal: Source is Project: name={}, path={}, node_path={:?}",
-				name, path.display(), node_path
+				name,
+				path.display(),
+				node_path
 			);
-			let mut project = Project::load(path)?;
+			let mut project = Project::load(&path)?;
 			trace!("apply_removal: Loaded project from {}", path.display());
 			let parent_node_path = node_path.parent();
-			trace!("apply_removal: Finding parent project node at path: {:?}", parent_node_path);
+			trace!(
+				"apply_removal: Finding parent project node at path: {:?}",
+				parent_node_path
+			);
 			let parent_node = project.find_node_by_path(&parent_node_path);
 
 			trace!("apply_removal: Attempting to remove node '{}' from parent's tree", name);
-			let removed_node = parent_node.and_then(|node| node.tree.remove(name)).ok_or_else(|| {
+			let removed_node = parent_node.and_then(|node| node.tree.remove(&name)).ok_or_else(|| {
 				let msg = format!(
 					"apply_removal: Failed to remove instance {:?} (name: {}) from project node tree at path {:?}",
 					id, name, parent_node_path
@@ -1120,7 +1414,10 @@ pub fn apply_removal(id: Ref, tree: &mut Tree, vfs: &Vfs) -> Result<()> {
 				error!("{}", msg);
 				anyhow!(msg)
 			})?;
-			trace!("apply_removal: Successfully removed node from project tree: {:?}", removed_node);
+			trace!(
+				"apply_removal: Successfully removed node from project tree: {:?}",
+				removed_node
+			);
 
 			if node.path.is_some() {
 				trace!("apply_removal: Project node had a custom path, calling remove_non_project_instances to clean up external files.");
@@ -1143,5 +1440,5 @@ pub fn apply_removal(id: Ref, tree: &mut Tree, vfs: &Vfs) -> Result<()> {
 	trace!("apply_removal: Removed instance {:?} from tree.", id);
 
 	trace!("apply_removal: Exiting function successfully");
-	Ok(()))
+	Ok(())
 }
