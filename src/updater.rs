@@ -19,7 +19,7 @@ use crate::{
 };
 
 // Enum to represent the detected editor CLI
-#[cfg(windows)]  // Only compile this enum on Windows where it's actually used
+#[cfg(windows)] // Only compile this enum on Windows where it's actually used
 #[derive(Debug)]
 enum EditorCli {
 	VsCode(PathBuf),
@@ -290,7 +290,11 @@ fn get_vscode_version() -> Option<String> {
 				command = std::process::Command::new(path);
 			}
 			Some(EditorCli::Cursor(path, extensions_dir)) => {
-				trace!("Using Cursor CLI for version check: {}", path.display());
+				trace!(
+					"Using Cursor CLI for version check: {} with extensions {}",
+					path.display(),
+					extensions_dir.display()
+				);
 				command = std::process::Command::new(path);
 				command.arg("--extensions-dir").arg(&extensions_dir);
 			}
@@ -600,7 +604,11 @@ fn update_vscode(status: &mut UpdateStatus, prompt: bool, force: bool) -> Result
 							(path, false, PathBuf::new()) // Not cursor, empty extensions dir
 						}
 						Some(EditorCli::Cursor(path, extensions_dir)) => {
-							trace!("Determined editor: Cursor CLI at {} with extensions {}", path.display(), extensions_dir.display());
+							trace!(
+								"Determined editor: Cursor CLI at {} with extensions {}",
+								path.display(),
+								extensions_dir.display()
+							);
 							(path, true, extensions_dir) // Is cursor, use provided extensions dir
 						}
 						None => {
