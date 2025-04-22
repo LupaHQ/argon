@@ -3,7 +3,8 @@ use log::{debug, info, trace, warn};
 use self_update::{backends::github::Update, version::bump_is_greater, Status};
 use serde::{Deserialize, Serialize};
 use std::{
-	fs,
+	env, fs,
+	path::PathBuf,
 	sync::Once,
 	time::{Duration, SystemTime},
 };
@@ -16,6 +17,13 @@ use crate::{
 	logger, sessions,
 	util::{self, get_plugin_path},
 };
+
+// Enum to represent the detected editor CLI
+#[derive(Debug)]
+enum EditorCli {
+	VsCode(PathBuf),
+	Cursor(PathBuf, PathBuf), // (cursor_cmd_path, extensions_dir_path)
+}
 
 static UPDATE_FORCED: Once = Once::new();
 const UPDATE_CHECK_INTERVAL: u64 = 3600;
@@ -269,7 +277,37 @@ fn update_templates(status: &mut UpdateStatus, prompt: bool, force: bool) -> Res
 // Get the currently installed VS Code extension version
 fn get_vscode_version() -> Option<String> {
 	// Try to get version using VS Code CLI
-	let output = std::process::Command::new("code")
+
+	// Determine the command to use
+	let mut command;
+	#[cfg(windows)]
+	{
+		// On Windows, try to find the specific executable first
+		match find_editor_cli_windows() {
+			Some(EditorCli::VsCode(path)) => {
+				trace!("Using VS Code CLI for version check: {}", path.display());
+				command = std::process::Command::new(path);
+			}
+			Some(EditorCli::Cursor(path, extensions_dir)) => {
+				trace!("Using Cursor CLI for version check: {}", path.display());
+				command = std::process::Command::new(path);
+				command.arg("--extensions-dir").arg(&extensions_dir);
+			}
+			None => {
+				// Fallback to PATH lookup if specific path not found
+				trace!("No specific editor CLI found, falling back to 'code' from PATH for version check");
+				command = std::process::Command::new("code");
+			}
+		}
+	}
+	#[cfg(not(windows))]
+	{
+		// On other platforms, just use "code" from PATH
+		trace!("Using 'code' from PATH for version check (non-Windows)");
+		command = std::process::Command::new("code");
+	}
+
+	let output = command // Use the determined command
 		.arg("--list-extensions")
 		.arg("--show-versions")
 		.output();
@@ -302,6 +340,90 @@ fn get_vscode_version() -> Option<String> {
 			None
 		}
 	}
+}
+
+// Helper function specifically for Windows to find the VS Code or Cursor executable
+#[cfg(windows)]
+fn find_editor_cli_windows() -> Option<EditorCli> {
+	trace!("Attempting to find VS Code or Cursor executable on Windows");
+
+	// --- 1. Check for VS Code ---
+
+	// 1a. Check LOCALAPPDATA (User Install)
+	if let Ok(local_app_data) = env::var("LOCALAPPDATA") {
+		let vscode_user_path = PathBuf::from(local_app_data)
+			.join("Programs")
+			.join("Microsoft VS Code")
+			.join("bin")
+			.join("code.cmd"); // Prefer .cmd
+		if vscode_user_path.exists() {
+			trace!("Found VS Code (user) at: {}", vscode_user_path.display());
+			return Some(EditorCli::VsCode(vscode_user_path));
+		}
+		let vscode_user_path_exe = vscode_user_path.with_extension("exe");
+		if vscode_user_path_exe.exists() {
+			trace!("Found VS Code (user, exe) at: {}", vscode_user_path_exe.display());
+			return Some(EditorCli::VsCode(vscode_user_path_exe));
+		}
+	}
+
+	// 1b. Check ProgramFiles (System Install)
+	if let Ok(program_files) = env::var("ProgramFiles") {
+		let vscode_system_path = PathBuf::from(program_files)
+			.join("Microsoft VS Code")
+			.join("bin")
+			.join("code.cmd");
+		if vscode_system_path.exists() {
+			trace!("Found VS Code (system) at: {}", vscode_system_path.display());
+			return Some(EditorCli::VsCode(vscode_system_path));
+		}
+		let vscode_system_path_exe = vscode_system_path.with_extension("exe");
+		if vscode_system_path_exe.exists() {
+			trace!("Found VS Code (system, exe) at: {}", vscode_system_path_exe.display());
+			return Some(EditorCli::VsCode(vscode_system_path_exe));
+		}
+	}
+
+	// --- 2. Check for Cursor (only if VS Code wasn't found) ---
+
+	// Get the user profile path for extensions directory
+	let user_profile = match env::var("USERPROFILE") {
+		Ok(path) => PathBuf::from(path),
+		Err(_) => {
+			trace!("Could not get USERPROFILE environment variable");
+			return None;
+		}
+	};
+
+	// Determine Cursor extensions directory
+	let cursor_extensions_dir = user_profile.join(".cursor").join("extensions");
+	trace!(
+		"Cursor extensions directory would be at: {}",
+		cursor_extensions_dir.display()
+	);
+
+	if let Ok(local_app_data) = env::var("LOCALAPPDATA") {
+		let cursor_path = PathBuf::from(local_app_data)
+			.join("Programs")
+			.join("cursor") // Cursor specific path
+			.join("resources")
+			.join("app")
+			.join("bin")
+			.join("cursor.cmd"); // Prefer cursor.cmd
+		if cursor_path.exists() {
+			trace!("Found Cursor at: {}", cursor_path.display());
+			return Some(EditorCli::Cursor(cursor_path, cursor_extensions_dir));
+		}
+		let cursor_path_exe = cursor_path.with_extension("exe");
+		if cursor_path_exe.exists() {
+			trace!("Found Cursor (exe) at: {}", cursor_path_exe.display());
+			return Some(EditorCli::Cursor(cursor_path_exe, cursor_extensions_dir));
+		}
+	}
+
+	// --- 3. Fallback ---
+	trace!("Neither VS Code nor Cursor found in standard locations, will rely on PATH lookup for 'code'");
+	None // Indicate we didn't find either in standard locations
 }
 
 fn update_vscode(status: &mut UpdateStatus, prompt: bool, force: bool) -> Result<bool> {
@@ -488,22 +610,96 @@ fn update_vscode(status: &mut UpdateStatus, prompt: bool, force: bool) -> Result
 				return Ok(false);
 			}
 
-			let output = std::process::Command::new("code")
-				.arg("--install-extension")
-				.arg(&vsix_path)
-				.arg("--force")
-				.output();
+			let mut command;
+			let mut using_cursor = false; // Make mutable
+			let mut cursor_extensions_dir = PathBuf::new(); // Make mutable
 
-			match output {
+			#[cfg(windows)]
+			{
+				// On Windows, try to find the specific executable first
+				match find_editor_cli_windows() {
+					Some(EditorCli::VsCode(path)) => {
+						trace!("Using VS Code CLI for install: {}", path.display());
+						command = std::process::Command::new(path);
+					}
+					Some(EditorCli::Cursor(path, extensions_dir)) => {
+						trace!("Using Cursor CLI for install: {}", path.display());
+						command = std::process::Command::new(path);
+						command.arg("--extensions-dir").arg(&extensions_dir);
+						using_cursor = true; // Remove 'let'
+						cursor_extensions_dir = extensions_dir; // Remove 'let'
+					}
+					None => {
+						// Fallback to PATH lookup if specific path not found
+						trace!("No specific editor CLI found, falling back to 'code' from PATH for install");
+						command = std::process::Command::new("code");
+					}
+				}
+			}
+			#[cfg(not(windows))]
+			{
+				// On other platforms, just use "code" from PATH
+				trace!("Using 'code' from PATH for install (non-Windows)");
+				command = std::process::Command::new("code");
+			}
+
+			command.arg("--install-extension");
+			command.arg(&vsix_path);
+			command.arg("--force");
+
+			trace!("Running install command: {:?}", command);
+
+			// Execute the installation command
+			match command.output() {
 				Ok(output) => {
 					let stdout = String::from_utf8_lossy(&output.stdout);
 					let stderr = String::from_utf8_lossy(&output.stderr);
-					println!("DEBUG: VS Code install stdout: {}", stdout);
-					println!("DEBUG: VS Code install stderr: {}", stderr);
-					trace!("VS Code stdout: {}", stdout);
-					trace!("VS Code stderr: {}", stderr);
+					println!("DEBUG: Install stdout: {}", stdout);
+					println!("DEBUG: Install stderr: {}", stderr);
+					trace!("Install stdout: {}", stdout);
+					trace!("Install stderr: {}", stderr);
 
 					if output.status.success() {
+						// Verify the installation if we're using Cursor
+						if using_cursor && !cursor_extensions_dir.as_os_str().is_empty() {
+							trace!("Verifying Cursor installation...");
+
+							// Wait a moment for the installation to complete
+							std::thread::sleep(std::time::Duration::from_secs(1));
+
+							// Create a verification command (use a new command instead of cloning)
+							let mut verify_cmd = std::process::Command::new(command.get_program());
+							verify_cmd.arg("--extensions-dir").arg(&cursor_extensions_dir);
+							verify_cmd.arg("--list-extensions");
+							verify_cmd.arg("--show-versions");
+
+							trace!("Running verification command: {:?}", verify_cmd);
+
+							match verify_cmd.output() {
+								Ok(verify_output) => {
+									let verify_stdout = String::from_utf8_lossy(&verify_output.stdout);
+									trace!("Verification output: {}", verify_stdout);
+
+									// Check if our extension is listed with the new version
+									let expected_line = format!("lemonade-labs.argon@{}", latest_version);
+									if verify_stdout.contains(&expected_line) {
+										trace!("Verification successful! Found {} in the list", expected_line);
+										// Continue with success logic
+									} else {
+										trace!("Verification failed! Expected {} but didn't find it", expected_line);
+										argon_warn!("Extension was reported as installed but verification failed. You may need to restart Cursor or manually install the extension.");
+										// Continue anyway as the CLI reported success
+									}
+								}
+								Err(err) => {
+									trace!("Verification command failed: {}", err);
+									argon_warn!("Could not verify if the extension was correctly installed in Cursor. You may need to restart Cursor or check the extension manually.");
+									// Continue anyway as the original install command succeeded
+								}
+							}
+						}
+
+						// Success logic - same as before
 						let _ = std::fs::remove_file(vsix_path);
 						argon_info!(
 							"VS Code extension updated! Please reload VS Code to apply changes. Visit {} to read the changelog",
@@ -512,15 +708,24 @@ fn update_vscode(status: &mut UpdateStatus, prompt: bool, force: bool) -> Result
 						status.vscode_version = latest_version_str; // Update status with owned String
 						return Ok(true);
 					} else {
+						// Error logic - same as before
 						argon_error!("Failed to install VS Code extension: {}", stderr);
 					}
 				}
 				Err(err) => {
-					println!("DEBUG: Failed to run VS Code CLI: {}", err);
-					argon_error!(
-						"Failed to run VS Code CLI: {}. Ensure 'code' command is in your system PATH.",
-						err
-					);
+					println!("DEBUG: Failed to run editor CLI: {}", err);
+					trace!("Failed to run editor CLI: {}", err);
+
+					if err.kind() == std::io::ErrorKind::NotFound {
+						// Improved Error Message for Not Found
+						argon_error!("Could not run the command-line tool for VS Code or Cursor. Please ensure either Visual Studio Code or Cursor is installed correctly and accessible via the system PATH, or installed in their standard locations. If already installed, try reinstalling and ensure any 'Add to PATH' options are checked during setup.");
+					} else {
+						// Generic error for other failures
+						argon_error!("Failed to run editor command-line tool: {}", err);
+					}
+					// This block needs to return Result<bool>, matching the function signature.
+					// Since an error occurred, we return Ok(false) indicating update didn't succeed.
+					return Ok(false);
 				}
 			}
 		} else {
