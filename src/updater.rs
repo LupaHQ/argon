@@ -19,6 +19,7 @@ use crate::{
 };
 
 // Enum to represent the detected editor CLI
+#[cfg(windows)] // Only compile this enum on Windows where it's actually used
 #[derive(Debug)]
 enum EditorCli {
 	VsCode(PathBuf),
@@ -289,7 +290,11 @@ fn get_vscode_version() -> Option<String> {
 				command = std::process::Command::new(path);
 			}
 			Some(EditorCli::Cursor(path, extensions_dir)) => {
-				trace!("Using Cursor CLI for version check: {}", path.display());
+				trace!(
+					"Using Cursor CLI for version check: {} with extensions {}",
+					path.display(),
+					extensions_dir.display()
+				);
 				command = std::process::Command::new(path);
 				command.arg("--extensions-dir").arg(&extensions_dir);
 			}
@@ -589,63 +594,46 @@ fn update_vscode(status: &mut UpdateStatus, prompt: bool, force: bool) -> Result
 			argon_info!("Installing VS Code extension...");
 			trace!("Running: code --install-extension {} --force", vsix_path.display());
 
-			if !vsix_path.exists() {
-				println!("DEBUG: VSIX file not found after download: {}", vsix_path.display());
-				argon_error!("VSIX file not found at {}", vsix_path.display());
-				return Ok(false);
-			}
-
-			let metadata = match std::fs::metadata(&vsix_path) {
-				Ok(meta) => meta,
-				Err(err) => {
-					println!("DEBUG: Failed to get VSIX file metadata: {}", err);
-					argon_error!("Failed to get VSIX file metadata: {}", err);
-					return Ok(false);
+			// Determine editor configuration first
+			let (cli_path, using_cursor, cursor_extensions_dir) = {
+				#[cfg(windows)]
+				{
+					match find_editor_cli_windows() {
+						Some(EditorCli::VsCode(path)) => {
+							trace!("Determined editor: VS Code CLI at {}", path.display());
+							(path, false, PathBuf::new()) // Not cursor, empty extensions dir
+						}
+						Some(EditorCli::Cursor(path, extensions_dir)) => {
+							trace!(
+								"Determined editor: Cursor CLI at {} with extensions {}",
+								path.display(),
+								extensions_dir.display()
+							);
+							(path, true, extensions_dir) // Is cursor, use provided extensions dir
+						}
+						None => {
+							trace!("Determined editor: Fallback to 'code' from PATH");
+							(PathBuf::from("code"), false, PathBuf::new()) // Fallback, not cursor
+						}
+					}
+				}
+				#[cfg(not(windows))]
+				{
+					trace!("Determined editor: 'code' from PATH (non-Windows)");
+					(PathBuf::from("code"), false, PathBuf::new()) // Standard 'code', not cursor
 				}
 			};
 
-			if metadata.len() == 0 {
-				println!("DEBUG: Downloaded VSIX file is empty");
-				argon_error!("Downloaded VSIX file is empty");
-				return Ok(false);
-			}
-
-			let mut command;
-			let mut using_cursor = false; // Make mutable
-			let mut cursor_extensions_dir = PathBuf::new(); // Make mutable
-
-			#[cfg(windows)]
-			{
-				// On Windows, try to find the specific executable first
-				match find_editor_cli_windows() {
-					Some(EditorCli::VsCode(path)) => {
-						trace!("Using VS Code CLI for install: {}", path.display());
-						command = std::process::Command::new(path);
-					}
-					Some(EditorCli::Cursor(path, extensions_dir)) => {
-						trace!("Using Cursor CLI for install: {}", path.display());
-						command = std::process::Command::new(path);
-						command.arg("--extensions-dir").arg(&extensions_dir);
-						using_cursor = true; // Remove 'let'
-						cursor_extensions_dir = extensions_dir; // Remove 'let'
-					}
-					None => {
-						// Fallback to PATH lookup if specific path not found
-						trace!("No specific editor CLI found, falling back to 'code' from PATH for install");
-						command = std::process::Command::new("code");
-					}
-				}
-			}
-			#[cfg(not(windows))]
-			{
-				// On other platforms, just use "code" from PATH
-				trace!("Using 'code' from PATH for install (non-Windows)");
-				command = std::process::Command::new("code");
-			}
-
+			// Build the command based on determined configuration
+			let mut command = std::process::Command::new(&cli_path);
 			command.arg("--install-extension");
 			command.arg(&vsix_path);
 			command.arg("--force");
+
+			// Add Cursor-specific argument if needed
+			if using_cursor && !cursor_extensions_dir.as_os_str().is_empty() {
+				command.arg("--extensions-dir").arg(&cursor_extensions_dir);
+			}
 
 			trace!("Running install command: {:?}", command);
 
@@ -667,8 +655,8 @@ fn update_vscode(status: &mut UpdateStatus, prompt: bool, force: bool) -> Result
 							// Wait a moment for the installation to complete
 							std::thread::sleep(std::time::Duration::from_secs(1));
 
-							// Create a verification command (use a new command instead of cloning)
-							let mut verify_cmd = std::process::Command::new(command.get_program());
+							// Create a verification command
+							let mut verify_cmd = std::process::Command::new(&cli_path); // Use determined cli_path
 							verify_cmd.arg("--extensions-dir").arg(&cursor_extensions_dir);
 							verify_cmd.arg("--list-extensions");
 							verify_cmd.arg("--show-versions");
