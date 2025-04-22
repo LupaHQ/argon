@@ -19,6 +19,7 @@ use crate::{
 };
 
 // Enum to represent the detected editor CLI
+#[cfg(windows)]  // Only compile this enum on Windows where it's actually used
 #[derive(Debug)]
 enum EditorCli {
 	VsCode(PathBuf),
