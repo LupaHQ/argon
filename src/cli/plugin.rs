@@ -22,7 +22,7 @@ impl Plugin {
 
 			if path.is_dir() || (smart_paths && (path.extension().is_none())) {
 				if !smart_paths || path.get_name().to_lowercase() != "argon" {
-					path.join("Argon.rbxm")
+					path.join("Lemonade.rbxm")
 				} else {
 					path.with_extension("rbxm")
 				}

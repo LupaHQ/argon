@@ -201,7 +201,7 @@ fn update_plugin(status: &mut UpdateStatus, prompt: bool, force: bool) -> Result
 	let update = Update::configure()
 		.repo_owner("LupaHQ")
 		.repo_name("argon-roblox")
-		.bin_name("Argon.rbxm")
+		.bin_name("Lemonade.rbxm")
 		.target("")
 		.show_download_progress(true)
 		.set_progress_style(style.0.clone(), style.1.clone())
@@ -214,14 +214,14 @@ fn update_plugin(status: &mut UpdateStatus, prompt: bool, force: bool) -> Result
 		if !prompt
 			|| logger::prompt(
 				&format!(
-					"New version of Argon plugin: {} is available! Would you like to update?",
+					"New version of Lemonade plugin: {} is available! Would you like to update?",
 					release.version.bold()
 				),
 				true,
 			) {
 			if !prompt {
 				argon_info!(
-					"New version of Argon plugin: {} is available! Updating..",
+					"New version of Lemonade plugin: {} is available! Updating..",
 					release.version.bold()
 				);
 			}
@@ -239,16 +239,16 @@ fn update_plugin(status: &mut UpdateStatus, prompt: bool, force: bool) -> Result
 				}
 				Err(err) => {
 					println!("DEBUG: update_plugin failed: {}", err);
-					argon_error!("Failed to update Argon plugin: {}", err);
+					argon_error!("Failed to update Lemonade plugin: {}", err);
 					Ok(false)
 				}
 			}
 		} else {
-			trace!("Argon plugin is out of date!");
+			trace!("Lemonade plugin is out of date!");
 			Ok(false)
 		}
 	} else {
-		trace!("Argon plugin is up to date!");
+		trace!("Lemonade plugin is up to date!");
 		Ok(false)
 	}
 }

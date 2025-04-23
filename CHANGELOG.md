@@ -6,7 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-[Unreleased]: https://github.com/LupaHQ/argon/compare/0.0.25...HEAD
+[Unreleased]: https://github.com/LupaHQ/argon/compare/0.0.26...HEAD
+
+## [0.0.26] - 2025-04-27
+
+### Changed
+
+- Renamed Roblox plugin file from "Argon.rbxm" to "Lemonade.rbxm" for brand consistency
+- Updated all file references and log messages to use the new plugin name
+
+[0.0.26]: https://github.com/LupaHQ/argon/compare/0.0.25...0.0.26
 
 ## [0.0.25] - 2025-04-26
 

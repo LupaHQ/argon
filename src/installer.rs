@@ -20,7 +20,7 @@ const MODEL_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/assets/templates/m
 const QUICK_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/assets/templates/quick");
 const EMPTY_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/assets/templates/empty");
 
-const ARGON_PLUGIN: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/Argon.rbxm"));
+const ARGON_PLUGIN: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/Lemonade.rbxm"));
 
 pub fn is_managed() -> bool {
 	let path = match env::current_exe() {
@@ -77,7 +77,7 @@ pub fn install_plugin(path: &Path, show_progress: bool) -> Result<()> {
 	let update = Update::configure()
 		.repo_owner("LupaHQ")
 		.repo_name("argon-roblox")
-		.bin_name("Argon.rbxm")
+		.bin_name("Lemonade.rbxm")
 		.target("")
 		.show_download_progress(show_progress)
 		.set_progress_style(style.0, style.1)
@@ -87,7 +87,7 @@ pub fn install_plugin(path: &Path, show_progress: bool) -> Result<()> {
 	match update.download() {
 		Ok(status) => match status {
 			UpdateStatus::Updated(release) => {
-				argon_info!("Installed Argon plugin, version: {}", release.version.bold());
+				argon_info!("Installed Lemonade plugin, version: {}", release.version.bold());
 
 				if path.contains(&["Roblox", "Plugins"]) {
 					let mut status = updater::get_status()?;
@@ -99,17 +99,17 @@ pub fn install_plugin(path: &Path, show_progress: bool) -> Result<()> {
 			_ => unreachable!(),
 		},
 		Err(err) => {
-			trace!("Failed to install Argon plugin from GitHub: {}", err);
+			trace!("Failed to install Lemonade plugin from GitHub: {}", err);
 
 			#[allow(clippy::const_is_empty)]
 			if ARGON_PLUGIN.is_empty() {
-				argon_error!("No internet connection! Failed to install Argon plugin - no bundled binary found");
+				argon_error!("No internet connection! Failed to install Lemonade plugin - no bundled binary found");
 				return Ok(());
 			}
 
 			fs::write(path, ARGON_PLUGIN)?;
 
-			argon_info!("No internet connection! Installed Argon plugin from bundled binary")
+			argon_info!("No internet connection! Installed Lemonade plugin from bundled binary")
 		}
 	}
 
