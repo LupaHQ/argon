@@ -133,13 +133,20 @@ async fn stop_running_sessions() -> Result<()> {
 
 pub fn update_cli(auto_update: bool) -> Result<bool> {
 	let status = get_status()?;
+	println!("DEBUG: update_cli called with auto_update={}", auto_update);
 
-	if status.last_checked.elapsed()?.as_secs() < UPDATE_CHECK_INTERVAL {
+	// Skip the time interval check if auto_update (force) is true
+	if !auto_update && status.last_checked.elapsed()?.as_secs() < UPDATE_CHECK_INTERVAL {
 		debug!("Update was checked less than an hour ago, skipping..");
+		println!("DEBUG: Skipping update check due to time interval");
 		return Ok(false);
 	}
+	
+	println!("DEBUG: Proceeding with update check{}", if auto_update { " (forced)" } else { "" });
 
 	let current_version = env!("CARGO_PKG_VERSION");
+	println!("DEBUG: Current CLI version: {}", current_version);
+	
 	let mut status = UpdateStatus {
 		last_checked: SystemTime::now(),
 		plugin_version: current_version.to_owned(),
@@ -154,17 +161,24 @@ pub fn update_cli(auto_update: bool) -> Result<bool> {
 		.current_version(current_version)
 		.build()?;
 
+	println!("DEBUG: Configured update checker for LupaHQ/argon");
+	
 	match update.get_latest_release() {
 		Ok(release) => {
+			println!("DEBUG: Found latest release: {}", release.version);
+			
 			if !bump_is_greater(&release.version, current_version)? {
+				println!("DEBUG: Latest version {} is NOT greater than current version {}", release.version, current_version);
 				debug!("No new version available");
 				set_status(&status)?;
 				return Ok(false);
 			}
-
+			
+			println!("DEBUG: Latest version {} IS greater than current version {}", release.version, current_version);
 			status.plugin_version = release.version.clone();
 
 			if auto_update {
+				println!("DEBUG: auto_update is true, proceeding with update");
 				info!("New version {} is available, updating..", release.version);
 
 				// Stop running sessions before update
@@ -182,11 +196,13 @@ pub fn update_cli(auto_update: bool) -> Result<bool> {
 					}
 				}
 			} else {
+				println!("DEBUG: auto_update is false, not performing actual update");
 				argon_info!("New version {} is available! Run {}", release.version, "argon update");
 				Ok(false)
 			}
 		}
 		Err(err) => {
+			println!("DEBUG: Failed to get latest release: {}", err);
 			argon_error!("Failed to check for updates: {}", err);
 			bail!("Update check failed: {}", err);
 		}
@@ -759,6 +775,7 @@ pub fn check_for_updates(plugin: bool, templates: bool, prompt: bool) -> Result<
 }
 
 pub fn manual_update(cli: bool, plugin: bool, templates: bool, vscode: bool, force: bool) -> Result<bool> {
+	println!("DEBUG: manual_update called with force={}", force);
 	UPDATE_FORCED.call_once(|| {});
 
 	let mut status = get_status()?;
@@ -767,6 +784,7 @@ pub fn manual_update(cli: bool, plugin: bool, templates: bool, vscode: bool, for
 	// Update CLI first, as it might contain fixes for other update processes
 	if cli {
 		argon_info!("Checking for CLI updates...");
+		println!("DEBUG: Calling update_cli with auto_update={}", force);
 		if update_cli(force)? {
 			updated = true;
 		}
