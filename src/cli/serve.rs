@@ -112,6 +112,22 @@ impl Serve {
 		let mut port = self.port.unwrap_or(core.port().unwrap_or(config.port));
 
 		if !server::is_port_free(&host, port) {
+			// Check if there's already an active Argon session using this host
+			if let Ok(all_sessions) = sessions::get_all() {
+				for (_, session) in all_sessions {
+					if let Some(session_host) = &session.host {
+						if *session_host == host && session.port.is_some() {
+							let address = server::format_address(&host, session.port.unwrap());
+							bail!(
+								"A Lemonade server is already running at {}. Please use this session instead of starting a new one.",
+								address.bold()
+							);
+						}
+					}
+				}
+			}
+			
+			// No existing session with this host found, handle as before
 			if config.scan_ports {
 				let new_port = server::get_free_port(&host, port);
 
