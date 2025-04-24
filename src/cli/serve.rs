@@ -119,7 +119,7 @@ impl Serve {
 						if *session_host == host && session.port.is_some() {
 							let address = server::format_address(&host, session.port.unwrap());
 							bail!(
-								"A Lemonade server is already running at {}. Please use this session instead of starting a new one.",
+								"A Lemonade server is already running at {}. Please use this session instead of starting a new one. or use argon stop to stop the existing server",
 								address.bold()
 							);
 						}
