@@ -126,7 +126,7 @@ impl Serve {
 					}
 				}
 			}
-			
+
 			// No existing session with this host found, handle as before
 			if config.scan_ports {
 				let new_port = server::get_free_port(&host, port);
