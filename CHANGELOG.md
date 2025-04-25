@@ -6,7 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-[Unreleased]: https://github.com/LupaHQ/argon/compare/0.0.26...HEAD
+[Unreleased]: https://github.com/LupaHQ/argon/compare/0.0.27...HEAD
+
+## [0.0.27] - 2025-04-28
+
+### Added
+
+- Added additional validation steps for extension installation
+
+### Fixed
+
+- Fixed extension update handling for different editor environments
+- Improved error recovery during update process
+- Updated server error message to suggest using `argon stop` command
+
+[0.0.27]: https://github.com/LupaHQ/argon/compare/0.0.26...0.0.27
 
 ## [0.0.26] - 2025-04-27
 
