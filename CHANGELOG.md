@@ -6,7 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-[Unreleased]: https://github.com/LupaHQ/argon/compare/0.0.28...HEAD
+[Unreleased]: https://github.com/LupaHQ/argon/compare/0.0.29...HEAD
+
+## [0.0.29] - 2024-07-25
+
+### Chore
+
+- Release to test workflow triggering.
 
 ## [0.0.28] - YYYY-MM-DD
 
@@ -625,3 +631,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 [0.0.21]: https://github.com/LupaHQ/argon/compare/0.0.17...0.0.21
 [0.0.22]: https://github.com/LupaHQ/argon/compare/0.0.21...0.0.22
+[0.0.29]: https://github.com/LupaHQ/argon/compare/0.0.28...0.0.29
