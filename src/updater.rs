@@ -141,12 +141,15 @@ pub fn update_cli(auto_update: bool) -> Result<bool> {
 		println!("DEBUG: Skipping update check due to time interval");
 		return Ok(false);
 	}
-	
-	println!("DEBUG: Proceeding with update check{}", if auto_update { " (forced)" } else { "" });
+
+	println!(
+		"DEBUG: Proceeding with update check{}",
+		if auto_update { " (forced)" } else { "" }
+	);
 
 	let current_version = env!("CARGO_PKG_VERSION");
 	println!("DEBUG: Current CLI version: {}", current_version);
-	
+
 	let mut status = UpdateStatus {
 		last_checked: SystemTime::now(),
 		plugin_version: current_version.to_owned(),
@@ -162,19 +165,25 @@ pub fn update_cli(auto_update: bool) -> Result<bool> {
 		.build()?;
 
 	println!("DEBUG: Configured update checker for LupaHQ/argon");
-	
+
 	match update.get_latest_release() {
 		Ok(release) => {
 			println!("DEBUG: Found latest release: {}", release.version);
-			
-			if !bump_is_greater(&release.version, current_version)? {
-				println!("DEBUG: Latest version {} is NOT greater than current version {}", release.version, current_version);
+
+			if !bump_is_greater(current_version, &release.version)? {
+				println!(
+					"DEBUG: Latest version {} is NOT greater than current version {}",
+					release.version, current_version
+				);
 				debug!("No new version available");
 				set_status(&status)?;
 				return Ok(false);
 			}
-			
-			println!("DEBUG: Latest version {} IS greater than current version {}", release.version, current_version);
+
+			println!(
+				"DEBUG: Latest version {} IS greater than current version {}",
+				release.version, current_version
+			);
 			status.plugin_version = release.version.clone();
 
 			if auto_update {

@@ -6,7 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-[Unreleased]: https://github.com/LupaHQ/argon/compare/0.0.27...HEAD
+[Unreleased]: https://github.com/LupaHQ/argon/compare/0.0.28...HEAD
+
+## [0.0.28] - YYYY-MM-DD
+
+### Fixed
+
+- Fixed self-update version comparison logic by swapping arguments in `bump_is_greater` call within `update_cli` function.
+
+[0.0.28]: https://github.com/LupaHQ/argon/compare/0.0.27...0.0.28
 
 ## [0.0.27] - 2025-04-28
 
