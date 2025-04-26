@@ -2,25 +2,42 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), that adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-[Unreleased]: https://github.com/LupaHQ/argon/compare/0.0.29...HEAD
+## [0.0.30] - 2024-09-06
 
-## [0.0.29] - 2024-07-25
+### Changed
 
-### Chore
+- Bumped version to align with VS Code extension release.
 
-- Release to test workflow triggering.
+## [0.0.29] - 2024-09-01
 
-## [0.0.28] - YYYY-MM-DD
+### Changed
+
+- Integrated `rmcp` library for Multi-Cursor Protocol server implementation.
+- Updated dependencies.
 
 ### Fixed
 
-- Fixed self-update version comparison logic by swapping arguments in `bump_is_greater` call within `update_cli` function.
+- Addressed potential issues with path handling and configuration loading.
 
-[0.0.28]: https://github.com/LupaHQ/argon/compare/0.0.27...0.0.28
+## [0.0.28] - 2024-08-20
+
+### Added
+
+- Initial support for `rmcp` library integration (server-side).
+
+### Changed
+
+- Refactored internal server communication logic.
+
+[Unreleased]: https://github.com/LupaHQ/argon/compare/0.0.29...HEAD
+[0.0.30]: https://github.com/LupaHQ/argon/compare/0.0.29...0.0.30
+[0.0.29]: https://github.com/LupaHQ/argon/compare/0.0.28...0.0.29
+[0.0.28]: https://github.com/LupaHQ/argon/releases/tag/0.0.28
 
 ## [0.0.27] - 2025-04-28
 
