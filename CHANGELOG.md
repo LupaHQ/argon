@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.31] - 2024-09-06
+
+### Changed
+
+- Bumped version to align with VS Code extension release (includes plugin change for AutoReconnect).
+
 ## [0.0.30] - 2024-09-06
 
 ### Changed
@@ -35,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refactored internal server communication logic.
 
 [Unreleased]: https://github.com/LupaHQ/argon/compare/0.0.29...HEAD
+[0.0.31]: https://github.com/LupaHQ/argon/compare/0.0.30...0.0.31
 [0.0.30]: https://github.com/LupaHQ/argon/compare/0.0.29...0.0.30
 [0.0.29]: https://github.com/LupaHQ/argon/compare/0.0.28...0.0.29
 [0.0.28]: https://github.com/LupaHQ/argon/releases/tag/0.0.28
